@@ -678,7 +678,7 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    <input type="text" value={empIdInput} onChange={e => setEmpIdInput(e.target.value)} placeholder="사번 (Employee ID)" className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold"/>
+                    <input type="text" value={empIdInput} onChange={e => setEmpIdInput(e.target.value)} placeholder="사번 (WN대문자+숫자 조합)" className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold"/>
                     
                     {authMode === 'register' && (
                       <input type="text" value={nameInput} onChange={e => setNameInput(e.target.value)} placeholder="실명 (예: 홍길동)" className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold"/>
