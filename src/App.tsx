@@ -185,45 +185,58 @@ export default function App() {
     showToast('응시 링크가 복사되었습니다!');
   };
 
-  // --- 💡 비밀번호 없는 사번 전용 로그인 로직 (강화됨) ---
+  // --- 💡 [핵심 수정] 로그인 지연 방지 및 즉시 동기화 로직 ---
   const handleStudentAuth = async () => {
     if (!empIdInput.trim()) return showToast('사번을 입력해주세요.');
     
-    // 파이어베이스는 소문자 이메일을 표준으로 처리하므로 서버 전송용은 소문자로 변환
-    const pseudoEmail = `${empIdInput.trim().toLowerCase()}@wuerth.exam`;
+    // 사번 무조건 대문자 처리
+    const finalEmpId = empIdInput.trim().toUpperCase();
+    const pseudoEmail = `${finalEmpId.toLowerCase()}@wuerth.exam`;
     const HIDDEN_SYSTEM_PASSWORD = "WuerthExamSecretPassword2026!";
 
     try {
+      let currentUser;
+      let userProf = null;
+
       if (authMode === 'register') {
         if (!nameInput.trim()) return showToast('이름을 입력해주세요.');
         const userCredential = await createUserWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          employeeId: empIdInput.trim(), // 대문자 처리된 WN 그대로 저장
+        currentUser = userCredential.user;
+        userProf = {
+          uid: currentUser.uid,
+          employeeId: finalEmpId,
           name: nameInput.trim(),
           role: 'student'
-        });
+        };
+        await setDoc(doc(db, 'users', currentUser.uid), userProf);
         showToast('가입이 완료되었습니다!');
       } else {
-        await signInWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
+        const userCredential = await signInWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
+        currentUser = userCredential.user;
+        const docSnap = await getDoc(doc(db, 'users', currentUser.uid));
+        if (docSnap.exists()) {
+          userProf = docSnap.data() as UserProfile;
+        }
         showToast('로그인 성공!');
       }
+
+      // 💡 해결 포인트: 파이어베이스 서버의 응답을 기다리지 않고, 즉시 앱 상태(State)에 프로필을 꽂아넣습니다.
+      setUser(currentUser);
+      if (userProf) {
+        setUserProfile(userProf as UserProfile);
+      }
+
       setEmpIdInput(''); setNameInput('');
+      
+      // 바로 시험장으로 넘어가도 프로필이 세팅되어 있으므로 에러가 나지 않습니다.
       if (currentExamId) setView('student-entry'); 
     } catch (error: any) {
-      console.error("Auth Error: ", error); // 브라우저 콘솔에 상세 에러 출력
-      
-      // 구체적인 에러 안내
       if (error.code === 'auth/email-already-in-use') {
         showToast('이미 등록된 사번입니다. [사번으로 시작]을 눌러주세요.');
       } else if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         showToast('등록되지 않은 사번입니다. [최초 등록]을 먼저 진행해주세요.');
-      } else if (error.code === 'auth/operation-not-allowed') {
-        showToast('⚠️ 관리자 설정 오류: 파이어베이스에서 Email/Password 로그인을 켜주세요!');
-      } else if (error.code === 'auth/invalid-email') {
-        showToast('사번 형식이 올바르지 않습니다. 공백 없이 입력해주세요.');
       } else {
-        showToast(`오류가 발생했습니다 (${error.code}). 다시 시도해주세요.`);
+        showToast('오류가 발생했습니다. 다시 시도해주세요.');
       }
     }
   };
@@ -416,7 +429,7 @@ export default function App() {
   const startExam = async () => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam) return showToast('시험 코드를 확인하세요.');
-    if (!user || !userProfile) return showToast('로그인이 필요합니다.');
+    if (!user || !userProfile) return showToast('회원 인증에 실패했습니다. 다시 로그인해주세요.');
 
     let masteredQuestions: string[] = [];
     
@@ -687,7 +700,6 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    {/* 💡 toUpperCase()를 통해 입력되는 즉시 대문자로 변환되도록 강제 */}
                     <input 
                       type="text" 
                       value={empIdInput} 
