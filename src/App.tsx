@@ -176,7 +176,7 @@ export default function App() {
 
   const showToast = (message: string) => {
     setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 4000); // 에러 메시지를 읽을 수 있게 4초로 늘림
   };
 
   const copyToClipboard = (examId: string) => {
@@ -185,12 +185,12 @@ export default function App() {
     showToast('응시 링크가 복사되었습니다!');
   };
 
-  // --- 💡 [핵심 수정] 로그인 지연 방지 및 즉시 동기화 로직 ---
+  // --- 💡 [에러 추적 강화] 로그인 및 회원가입 로직 ---
   const handleStudentAuth = async () => {
     if (!empIdInput.trim()) return showToast('사번을 입력해주세요.');
     
-    // 사번 무조건 대문자 처리
-    const finalEmpId = empIdInput.trim().toUpperCase();
+    // 띄어쓰기 전부 제거 후 대문자 처리 (예: "wn 123" -> "WN123")
+    const finalEmpId = empIdInput.trim().replace(/\s+/g, '').toUpperCase();
     const pseudoEmail = `${finalEmpId.toLowerCase()}@wuerth.exam`;
     const HIDDEN_SYSTEM_PASSWORD = "WuerthExamSecretPassword2026!";
 
@@ -200,6 +200,7 @@ export default function App() {
 
       if (authMode === 'register') {
         if (!nameInput.trim()) return showToast('이름을 입력해주세요.');
+        // 1. 파이어베이스 인증(계정 생성)
         const userCredential = await createUserWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
         currentUser = userCredential.user;
         userProf = {
@@ -208,6 +209,7 @@ export default function App() {
           name: nameInput.trim(),
           role: 'student'
         };
+        // 2. Firestore에 회원 정보 저장 (여기서 permission-denied 에러가 날 수 있음)
         await setDoc(doc(db, 'users', currentUser.uid), userProf);
         showToast('가입이 완료되었습니다!');
       } else {
@@ -220,7 +222,6 @@ export default function App() {
         showToast('로그인 성공!');
       }
 
-      // 💡 해결 포인트: 파이어베이스 서버의 응답을 기다리지 않고, 즉시 앱 상태(State)에 프로필을 꽂아넣습니다.
       setUser(currentUser);
       if (userProf) {
         setUserProfile(userProf as UserProfile);
@@ -228,15 +229,24 @@ export default function App() {
 
       setEmpIdInput(''); setNameInput('');
       
-      // 바로 시험장으로 넘어가도 프로필이 세팅되어 있으므로 에러가 나지 않습니다.
       if (currentExamId) setView('student-entry'); 
     } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
+      console.error("자세한 에러 로그: ", error);
+      
+      // 어떤 에러인지 정확히 화면에 출력!
+      const errCode = error.code || '알 수 없는 오류';
+      
+      if (errCode === 'auth/email-already-in-use') {
         showToast('이미 등록된 사번입니다. [사번으로 시작]을 눌러주세요.');
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+      } else if (errCode === 'auth/user-not-found' || errCode === 'auth/invalid-credential' || errCode === 'auth/wrong-password') {
         showToast('등록되지 않은 사번입니다. [최초 등록]을 먼저 진행해주세요.');
+      } else if (errCode === 'auth/operation-not-allowed') {
+        showToast('🚨 파이어베이스 설정 에러: [Authentication] 메뉴에서 [이메일/비밀번호] 제공업체를 켜주세요!');
+      } else if (errCode === 'permission-denied') {
+        showToast('🚨 데이터베이스 에러: Firestore Rules 권한이 잠겨있습니다. 확인해주세요!');
       } else {
-        showToast('오류가 발생했습니다. 다시 시도해주세요.');
+        // 예상치 못한 에러일 경우 에러 코드를 그대로 화면에 노출
+        showToast(`에러가 발생했습니다: [${errCode}]`);
       }
     }
   };
