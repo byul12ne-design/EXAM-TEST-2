@@ -185,37 +185,46 @@ export default function App() {
     showToast('응시 링크가 복사되었습니다!');
   };
 
-  // --- 💡 비밀번호 없는 사번 전용 로그인 로직 ---
+  // --- 💡 비밀번호 없는 사번 전용 로그인 로직 (강화됨) ---
   const handleStudentAuth = async () => {
     if (!empIdInput.trim()) return showToast('사번을 입력해주세요.');
     
-    const pseudoEmail = `${empIdInput.trim()}@wuerth.exam`;
-    // 시스템 내부적으로만 사용하는 공통 비밀번호 (사용자에게는 보이지 않음)
+    // 파이어베이스는 소문자 이메일을 표준으로 처리하므로 서버 전송용은 소문자로 변환
+    const pseudoEmail = `${empIdInput.trim().toLowerCase()}@wuerth.exam`;
     const HIDDEN_SYSTEM_PASSWORD = "WuerthExamSecretPassword2026!";
 
     try {
       if (authMode === 'register') {
         if (!nameInput.trim()) return showToast('이름을 입력해주세요.');
-        // 백그라운드에서 공통 비밀번호로 가입 처리
         const userCredential = await createUserWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
         await setDoc(doc(db, 'users', userCredential.user.uid), {
           uid: userCredential.user.uid,
-          employeeId: empIdInput.trim(),
+          employeeId: empIdInput.trim(), // 대문자 처리된 WN 그대로 저장
           name: nameInput.trim(),
           role: 'student'
         });
         showToast('가입이 완료되었습니다!');
       } else {
-        // 백그라운드에서 공통 비밀번호로 로그인 처리
         await signInWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
         showToast('로그인 성공!');
       }
       setEmpIdInput(''); setNameInput('');
       if (currentExamId) setView('student-entry'); 
     } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') showToast('이미 등록된 사번입니다. [로그인] 탭을 이용해주세요.');
-      else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') showToast('등록되지 않은 사번입니다. [회원가입]을 먼저 진행해주세요.');
-      else showToast('오류가 발생했습니다. 다시 시도해주세요.');
+      console.error("Auth Error: ", error); // 브라우저 콘솔에 상세 에러 출력
+      
+      // 구체적인 에러 안내
+      if (error.code === 'auth/email-already-in-use') {
+        showToast('이미 등록된 사번입니다. [사번으로 시작]을 눌러주세요.');
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+        showToast('등록되지 않은 사번입니다. [최초 등록]을 먼저 진행해주세요.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        showToast('⚠️ 관리자 설정 오류: 파이어베이스에서 Email/Password 로그인을 켜주세요!');
+      } else if (error.code === 'auth/invalid-email') {
+        showToast('사번 형식이 올바르지 않습니다. 공백 없이 입력해주세요.');
+      } else {
+        showToast(`오류가 발생했습니다 (${error.code}). 다시 시도해주세요.`);
+      }
     }
   };
 
@@ -678,10 +687,23 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    <input type="text" value={empIdInput} onChange={e => setEmpIdInput(e.target.value)} placeholder="사번 (WN대문자+숫자 조합)" className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold"/>
+                    {/* 💡 toUpperCase()를 통해 입력되는 즉시 대문자로 변환되도록 강제 */}
+                    <input 
+                      type="text" 
+                      value={empIdInput} 
+                      onChange={e => setEmpIdInput(e.target.value.toUpperCase())} 
+                      placeholder="사번 (예: WN1234)" 
+                      className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold placeholder:font-normal"
+                    />
                     
                     {authMode === 'register' && (
-                      <input type="text" value={nameInput} onChange={e => setNameInput(e.target.value)} placeholder="실명 (예: 홍길동)" className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold"/>
+                      <input 
+                        type="text" 
+                        value={nameInput} 
+                        onChange={e => setNameInput(e.target.value)} 
+                        placeholder="실명 (예: 홍길동)" 
+                        className="w-full bg-slate-50 border p-4 rounded-2xl text-sm outline-none focus:border-blue-500 transition-colors text-center font-bold placeholder:font-normal"
+                      />
                     )}
                     
                     <button onClick={handleStudentAuth} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md hover:bg-blue-700 transition-colors mt-2">
