@@ -176,7 +176,7 @@ export default function App() {
 
   const showToast = (message: string) => {
     setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 4000); // 에러 메시지를 읽을 수 있게 4초로 늘림
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const copyToClipboard = (examId: string) => {
@@ -185,11 +185,10 @@ export default function App() {
     showToast('응시 링크가 복사되었습니다!');
   };
 
-  // --- 💡 [에러 추적 강화] 로그인 및 회원가입 로직 ---
+  // --- 💡 강력해진 인증 및 좀비 계정 자동 복구 로직 ---
   const handleStudentAuth = async () => {
     if (!empIdInput.trim()) return showToast('사번을 입력해주세요.');
     
-    // 띄어쓰기 전부 제거 후 대문자 처리 (예: "wn 123" -> "WN123")
     const finalEmpId = empIdInput.trim().replace(/\s+/g, '').toUpperCase();
     const pseudoEmail = `${finalEmpId.toLowerCase()}@wuerth.exam`;
     const HIDDEN_SYSTEM_PASSWORD = "WuerthExamSecretPassword2026!";
@@ -200,53 +199,46 @@ export default function App() {
 
       if (authMode === 'register') {
         if (!nameInput.trim()) return showToast('이름을 입력해주세요.');
-        // 1. 파이어베이스 인증(계정 생성)
-        const userCredential = await createUserWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
-        currentUser = userCredential.user;
-        userProf = {
-          uid: currentUser.uid,
-          employeeId: finalEmpId,
-          name: nameInput.trim(),
-          role: 'student'
-        };
-        // 2. Firestore에 회원 정보 저장 (여기서 permission-denied 에러가 날 수 있음)
-        await setDoc(doc(db, 'users', currentUser.uid), userProf);
-        showToast('가입이 완료되었습니다!');
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
+          currentUser = userCredential.user;
+          userProf = { uid: currentUser.uid, employeeId: finalEmpId, name: nameInput.trim(), role: 'student' };
+          await setDoc(doc(db, 'users', currentUser.uid), userProf);
+          showToast('가입이 완료되었습니다!');
+        } catch (err: any) {
+          // 아까 권한 에러 났을 때 생성된 좀비 계정을 마주치면 자동으로 치료하고 로그인시킴!
+          if (err.code === 'auth/email-already-in-use') {
+             const userCredential = await signInWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
+             currentUser = userCredential.user;
+             userProf = { uid: currentUser.uid, employeeId: finalEmpId, name: nameInput.trim(), role: 'student' };
+             await setDoc(doc(db, 'users', currentUser.uid), userProf);
+             showToast('기존 등록 정보를 연동하여 접속했습니다!');
+          } else {
+             throw err;
+          }
+        }
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, pseudoEmail, HIDDEN_SYSTEM_PASSWORD);
         currentUser = userCredential.user;
         const docSnap = await getDoc(doc(db, 'users', currentUser.uid));
         if (docSnap.exists()) {
           userProf = docSnap.data() as UserProfile;
+          showToast('로그인 성공!');
+        } else {
+          return showToast('이름 정보가 유실되었습니다. [최초 등록] 탭에서 이름을 다시 입력하고 진행해주세요.');
         }
-        showToast('로그인 성공!');
       }
 
       setUser(currentUser);
-      if (userProf) {
-        setUserProfile(userProf as UserProfile);
-      }
-
+      if (userProf) setUserProfile(userProf as UserProfile);
       setEmpIdInput(''); setNameInput('');
       
       if (currentExamId) setView('student-entry'); 
     } catch (error: any) {
-      console.error("자세한 에러 로그: ", error);
-      
-      // 어떤 에러인지 정확히 화면에 출력!
-      const errCode = error.code || '알 수 없는 오류';
-      
-      if (errCode === 'auth/email-already-in-use') {
-        showToast('이미 등록된 사번입니다. [사번으로 시작]을 눌러주세요.');
-      } else if (errCode === 'auth/user-not-found' || errCode === 'auth/invalid-credential' || errCode === 'auth/wrong-password') {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         showToast('등록되지 않은 사번입니다. [최초 등록]을 먼저 진행해주세요.');
-      } else if (errCode === 'auth/operation-not-allowed') {
-        showToast('🚨 파이어베이스 설정 에러: [Authentication] 메뉴에서 [이메일/비밀번호] 제공업체를 켜주세요!');
-      } else if (errCode === 'permission-denied') {
-        showToast('🚨 데이터베이스 에러: Firestore Rules 권한이 잠겨있습니다. 확인해주세요!');
       } else {
-        // 예상치 못한 에러일 경우 에러 코드를 그대로 화면에 노출
-        showToast(`에러가 발생했습니다: [${errCode}]`);
+        showToast('오류가 발생했습니다. 다시 시도해주세요.');
       }
     }
   };
@@ -697,10 +689,10 @@ export default function App() {
             )}
           </nav>
 
-          <main className="p-6 max-w-5xl mx-auto w-full flex-1">
+          <main className="p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col">
             
             {view === 'home' && !userProfile && (
-              <div className="flex flex-col items-center gap-12 py-20 text-center">
+              <div className="flex flex-col items-center gap-12 py-20 text-center flex-1 justify-center">
                 <h2 className="text-4xl sm:text-5xl font-black text-slate-800 break-keep">뷔르트 제품 Quiz</h2>
                 
                 <div className="bg-white p-8 sm:p-10 rounded-[2.5rem] shadow-sm border w-full max-w-md space-y-6">
@@ -733,33 +725,60 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
 
-                <button onClick={() => setView('admin-login')} className="text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors">
-                  관리자로 접속하기 👉
+            {/* 💡 완전히 새로워진 대기실(학생 홈) UI: 코드를 칠 필요 없이 목록에서 바로 입장! */}
+            {view === 'home' && userProfile && (
+               <div className="flex flex-col items-center py-10 w-full animate-fade-in-up">
+                <div className="text-center mb-10">
+                  <span className="text-5xl mb-4 block">👋</span>
+                  <h2 className="text-3xl sm:text-4xl font-black text-slate-800 break-keep">환영합니다, {userProfile.name}님!</h2>
+                  <p className="text-slate-500 mt-2 font-medium">응시할 시험을 선택하고 바로 시작해보세요.</p>
+                </div>
+
+                <div className="w-full max-w-2xl bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-sm border border-slate-200">
+                  <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                    <span className="text-blue-500">📋</span> 현재 열려있는 시험 목록
+                  </h3>
+                  
+                  {exams.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                      <p className="text-slate-400 font-bold">현재 등록된 시험이 없습니다.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {exams.map(exam => (
+                        <div key={exam.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-slate-50 border border-slate-200 rounded-3xl hover:border-blue-300 hover:bg-blue-50/50 transition-all gap-4 group">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-bold text-lg text-slate-800 group-hover:text-blue-700 transition-colors break-keep">{exam.title}</h4>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${exam.mode === 'test' ? 'bg-purple-100 text-purple-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                {exam.mode === 'test' ? '평가형' : '학습형'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500">출제 문항 수: {exam.displayCount || exam.questions.length}개</p>
+                          </div>
+                          <button 
+                            onClick={() => { setCurrentExamId(exam.id); setView('student-entry'); }}
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold transition-all text-sm shadow-md active:scale-95 whitespace-nowrap"
+                          >
+                            시험 입장하기 👉
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={() => setView('admin-login')} className="mt-12 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors">
+                  ⚙️ 관리자 대시보드 접속
                 </button>
               </div>
             )}
 
-            {view === 'home' && userProfile && (
-               <div className="flex flex-col items-center gap-12 py-20 text-center">
-                <h2 className="text-4xl sm:text-5xl font-black text-slate-800 break-keep">환영합니다, {userProfile.name}님!</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
-                  <button onClick={() => setView('admin-login')} className="p-10 bg-white border rounded-[2.5rem] shadow-sm hover:border-blue-500 transition-all flex flex-col justify-center items-center gap-4 group">
-                    <span className="text-2xl font-bold text-slate-800">관리자</span>
-                  </button>
-                  <div className="p-10 bg-white border rounded-[2.5rem] shadow-sm flex flex-col justify-center items-center gap-4 border-blue-500 bg-blue-50/50">
-                    <span className="text-2xl font-bold text-blue-800 mb-2">시험 응시</span>
-                    <div className="flex gap-2 w-full">
-                      <input value={currentExamId} onChange={e => setCurrentExamId(e.target.value)} placeholder="시험 코드 입력" className="border rounded-xl px-4 py-3 w-full text-sm outline-none bg-white"/>
-                      <button onClick={() => currentExamId && setView('student-entry')} className="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-5 py-3 rounded-xl font-bold whitespace-nowrap shrink-0">입장</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {view === 'admin-login' && (
-              <div className="max-w-md mx-auto py-20 text-center">
+              <div className="max-w-md mx-auto py-20 text-center flex-1">
                 <h2 className="text-2xl font-bold mb-8 text-slate-800">관리자 인증</h2>
                 <input type="password" value={adminPasswordInput} onChange={e => setAdminPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()} className="w-full border-2 rounded-2xl p-4 mb-4 text-center text-lg outline-none focus:border-blue-500" placeholder="비밀번호를 입력하세요"/>
                 <button onClick={handleAdminLogin} className="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-slate-900 transition-colors">접속</button>
