@@ -19,7 +19,9 @@ import {
   setDoc, 
   getDoc, 
   writeBatch, 
-  arrayUnion
+  arrayUnion, 
+  query, 
+  orderBy 
 } from 'firebase/firestore';
 
 // ==========================================
@@ -126,8 +128,9 @@ export default function App() {
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const [customExamId, setCustomExamId] = useState(''); 
   const [newExamTitle, setNewExamTitle] = useState('');
+  const [newExamNotice, setNewExamNotice] = useState('');
   const [newExamMode, setNewExamMode] = useState<'study' | 'test'>('study');
-  const [displayCount, setDisplayCount] = useState(''); // 💡 랜덤 출제 문항 수 상태
+  const [displayCount, setDisplayCount] = useState('');
   const [requireName, setRequireName] = useState(true);
   const [recordScores, setRecordScores] = useState(true); 
   
@@ -170,6 +173,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+    
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
@@ -205,7 +210,6 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
-  // CSV 파싱
   const parseCSV = (text: string) => {
     const rows = [];
     const lines = text.split(/\r?\n/);
@@ -390,13 +394,12 @@ export default function App() {
     const cleanedQuestions = newQuestions.filter(q => q.text.trim() !== '').map(q => ({...q, category: q.category || '미분류', explanation: q.explanation || ''}));
     if (cleanedQuestions.length === 0) return showToast('최소 1개 이상의 문제를 등록해주세요.');
     
-    // 💡 랜덤 출제 문항 수 파싱 로직 
     const dCount = parseInt(displayCount) || cleanedQuestions.length;
 
     const examData = { 
       title: newExamTitle, mode: newExamMode,
       requireName, recordScores, questions: cleanedQuestions, 
-      displayCount: dCount, // 데이터 저장됨
+      displayCount: dCount, 
       createdAt: Date.now() 
     };
 
@@ -454,6 +457,19 @@ export default function App() {
     }
   };
 
+  // 💡 자율 학습 진행도 초기화 기능
+  const handleResetProgress = async (examId: string) => {
+    if (!userProfile) return;
+    if (window.confirm('지금까지 맞춘 학습 기록을 모두 초기화하고 모든 문제를 처음부터 다시 푸시겠습니까?')) {
+      try {
+        await deleteDoc(doc(db, 'progress', `${userProfile.uid}_${examId}`));
+        showToast('🔄 학습 기록이 초기화되었습니다. 처음부터 다시 시작합니다!');
+      } catch(e) {
+        showToast('❌ 초기화 실패! 권한을 확인해주세요.');
+      }
+    }
+  };
+
   const startExam = async () => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
@@ -466,11 +482,10 @@ export default function App() {
 
     const pool = exam.questions.filter(q => !masteredQuestions.includes(q.text));
     if (pool.length === 0) {
-      showToast('이미 모든 문제를 마스터하셨습니다!');
+      showToast('이미 모든 문제를 마스터하셨습니다! 다시 풀려면 초기화 버튼을 눌러주세요.');
       setStudentScore(100); setView('student-result'); return;
     }
 
-    // 💡 저장된 랜덤 출제 문항 수(displayCount)에 맞춰 자르기
     const finalCount = parseInt(exam.displayCount?.toString() || pool.length.toString());
     const selectedQuestions = pool.sort(() => Math.random() - 0.5).slice(0, finalCount);
     
@@ -606,6 +621,7 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 
+                {/* 💡 왼쪽: 자율 학습하기 (초기화 버튼 추가) */}
                 <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl">📖</div>
@@ -626,13 +642,17 @@ export default function App() {
                               전체 풀: {exam.questions.length} / 랜덤 출제: {exam.displayCount || '전체'}
                             </p>
                           </div>
-                          <button onClick={() => { setCurrentExamId(exam.id); setView('student-entry'); }} className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm whitespace-nowrap">학습 시작 👉</button>
+                          <div className="flex gap-2 w-full sm:w-auto">
+                            <button onClick={() => handleResetProgress(exam.id)} className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-600 px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm whitespace-nowrap">초기화 🔄</button>
+                            <button onClick={() => { setCurrentExamId(exam.id); setView('student-entry'); }} className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm whitespace-nowrap">학습 시작 👉</button>
+                          </div>
                         </div>
                       ))
                     )}
                   </div>
                 </div>
 
+                {/* 오른쪽: 실전 퀴즈 응시 */}
                 <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-2xl">🏆</div>
@@ -683,7 +703,6 @@ export default function App() {
 
               {adminTab === 'bank' && (
                 <div className="space-y-6">
-                  {/* 단건 등록 영역 */}
                   <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
                       <h3 className="font-bold text-blue-700">새로운 문제 보관하기</h3>
@@ -705,7 +724,6 @@ export default function App() {
                     <button onClick={handleSaveBankQuestion} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold shadow-sm">저장고에 넣기</button>
                   </div>
 
-                  {/* 목록 필터 영역 */}
                   <div className="bg-slate-100 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       <span className="text-sm font-bold text-slate-600">분류 필터:</span>
@@ -724,7 +742,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 문제 목록 */}
                   <div className="grid gap-3">
                     {filteredBank.length > 0 && (
                       <label className="bg-slate-200 p-4 rounded-2xl flex gap-4 cursor-pointer hover:bg-slate-300 transition-all items-center shadow-sm">
@@ -806,7 +823,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 세트 생성/수정 화면 (랜덤 출제 문항 수 UI 복구) */}
           {view === 'admin-create' && (
             <div className="space-y-8 pb-20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -834,11 +850,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 💡 [복구됨] 추가 설정 섹션 (랜덤 문항 수, 성적 기록) */}
               <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-4">
                 <span className="text-xs font-black text-slate-400 tracking-widest uppercase">⚙️ 추가 설정</span>
                 <div className="flex flex-col sm:flex-row gap-6">
-                  {/* 성적 저장 여부 */}
                   <label className="flex-1 flex items-center justify-between cursor-pointer p-4 border rounded-2xl bg-slate-50">
                     <div>
                       <h5 className="font-bold text-sm text-slate-700">성적 데이터 기록</h5>
@@ -849,7 +863,6 @@ export default function App() {
                     </div>
                   </label>
                   
-                  {/* 랜덤 출제 문항 수 */}
                   <div className="flex-1 flex items-center justify-between p-4 border rounded-2xl bg-slate-50">
                     <div>
                       <h5 className="font-bold text-sm text-slate-700">🔀 랜덤 출제 문항 수</h5>
@@ -899,7 +912,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 창고에서 문제 불러오기 모달 */}
           {isBankModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-[2rem] p-6 sm:p-8 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
@@ -944,7 +956,7 @@ export default function App() {
                           className="w-5 h-5 cursor-pointer accent-blue-600"
                         />
                       </div>
-                      <div className="flex-1">
+                      <div>
                         <div className="flex gap-2 mb-1">
                           <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase">{q.category || '미분류'}</span>
                         </div>
@@ -974,7 +986,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 대기실 */}
           {view === 'student-entry' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-3xl font-black text-slate-800">{exams.find(e => e.id === currentExamId)?.title}</h2>
@@ -982,7 +993,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 자율학습 진행 */}
           {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode !== 'test' && questionQueue.length > 0 && (
             <div className="max-w-xl mx-auto space-y-6 pb-20">
               <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
@@ -1004,7 +1014,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 실전퀴즈 진행 */}
           {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode === 'test' && activeQuestions.length > 0 && (
             <div className="max-w-2xl mx-auto space-y-6 pb-20">
               {activeQuestions.map((q, qIndex) => (
@@ -1023,7 +1032,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 결과 화면 */}
           {view === 'student-result' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-4xl font-black text-slate-800">수고하셨습니다!</h2>
