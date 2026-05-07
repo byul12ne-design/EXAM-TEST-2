@@ -19,7 +19,9 @@ import {
   setDoc, 
   getDoc, 
   writeBatch, 
-  arrayUnion
+  arrayUnion, 
+  query, 
+  orderBy 
 } from 'firebase/firestore';
 
 // ==========================================
@@ -136,7 +138,10 @@ export default function App() {
     { category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }
   ]);
 
+  // 💡 저장고 수정 모드 상태 추가
+  const [editingBankId, setEditingBankId] = useState<string | null>(null);
   const [newBankQuestion, setNewBankQuestion] = useState<Question>({ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
+  
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
   const [bankCategoryFilter, setBankCategoryFilter] = useState<string>('all');
@@ -156,7 +161,6 @@ export default function App() {
     }
   }, []);
 
-  // 인증
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -171,35 +175,30 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 💡 데이터 로드 (user 검사 없앰! 누구나 볼 수 있도록 허용)
   useEffect(() => {
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
       setExams(loadedExams);
-    }, (error) => console.error("Exams 로드 에러:", error));
+      if (loadedExams.length > 0 && !selectedAnalyticsExamId) {
+        setSelectedAnalyticsExamId(loadedExams[0].id);
+      }
+    }, (error) => console.error(error));
 
     const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
       const loadedResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult));
       loadedResults.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setResults(loadedResults);
-    }, (error) => console.error("Results 로드 에러:", error));
+    }, (error) => console.error(error));
 
     const unsubBank = onSnapshot(collection(db, 'questionBank'), (snapshot) => {
       const loadedBank = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
       loadedBank.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setQuestionBank(loadedBank);
-    }, (error) => console.error("Bank 로드 에러:", error));
+    }, (error) => console.error(error));
 
     return () => { unsubExams(); unsubResults(); unsubBank(); };
-  }, []); 
-
-  // exams 로드 후 selectedAnalyticsExamId 자동 세팅
-  useEffect(() => {
-    if (exams.length > 0 && !selectedAnalyticsExamId) {
-      setSelectedAnalyticsExamId(exams[0].id);
-    }
-  }, [exams, selectedAnalyticsExamId]);
+  }, [selectedAnalyticsExamId]); 
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -420,16 +419,39 @@ export default function App() {
     }
   };
 
+  // 💡 저장고 문제 오타 수정 로직
   const handleSaveBankQuestion = async () => {
     if (!newBankQuestion.text.trim()) return showToast('문제를 입력해주세요.');
     try {
-      await addDoc(collection(db, 'questionBank'), { ...newBankQuestion, category: newBankQuestion.category || '미분류', createdAt: Date.now() });
+      if (editingBankId) {
+        await setDoc(doc(db, 'questionBank', editingBankId), { 
+          ...newBankQuestion, category: newBankQuestion.category || '미분류' 
+        }, { merge: true });
+        setEditingBankId(null);
+        showToast('✅ 수정이 완료되었습니다.');
+      } else {
+        await addDoc(collection(db, 'questionBank'), { 
+          ...newBankQuestion, category: newBankQuestion.category || '미분류', createdAt: Date.now() 
+        });
+        showToast('✅ 문제 저장고에 추가되었습니다.');
+      }
       setNewBankQuestion({ category: newBankQuestion.category, text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
-      showToast('✅ 문제 저장고에 추가되었습니다.');
     } catch(e) { 
       console.error(e);
       showToast('❌ 저장 실패!'); 
     }
+  };
+
+  const handleEditBankQuestion = (q: BankQuestion) => {
+    setEditingBankId(q.id);
+    setNewBankQuestion({
+      category: q.category || '',
+      text: q.text,
+      options: [...q.options],
+      answerIndex: q.answerIndex,
+      explanation: q.explanation || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // 화면을 위로 올려줌
   };
 
   const handleCreateQuizFromBank = () => {
@@ -493,8 +515,16 @@ export default function App() {
     
     setActiveQuestions(selectedQuestions);
     setFirstAttemptAnswers({});
+    
     if (exam.mode === 'test') {
-      setTestAnswers({});
+      // 💡 실전 퀴즈: 임시 저장된 답안 불러오기
+      const tpDoc = await getDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
+      if (tpDoc.exists() && tpDoc.data().answers) {
+        setTestAnswers(tpDoc.data().answers);
+        showToast('🔄 임시 저장된 마킹 내용을 불러왔습니다.');
+      } else {
+        setTestAnswers({});
+      }
     } else {
       setQuestionQueue(selectedQuestions.map((q, idx) => ({q, originalIndex: idx})));
       setIsAnswerChecked(false); setCurrentSelectedOption(null);
@@ -516,6 +546,15 @@ export default function App() {
     setCurrentSelectedOption(null);
 
     if (nextQueue.length === 0) submitExam(firstAttemptAnswers);
+  };
+
+  // 💡 실전 퀴즈 마킹 시 자동 임시저장 로직
+  const handleTestOptionClick = async (qIndex: number, oi: number) => {
+    const nextAnswers = {...testAnswers, [qIndex]: oi};
+    setTestAnswers(nextAnswers);
+    if (userProfile) {
+      await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), { answers: nextAnswers }, { merge: true });
+    }
   };
 
   const submitExam = async (finalAnswers: Record<number, number>) => {
@@ -547,6 +586,9 @@ export default function App() {
       await setDoc(doc(db, 'progress', `${userProfile.uid}_${currentExamId}`), {
         masteredQuestionTexts: arrayUnion(...newlyMasteredTexts), updatedAt: Date.now()
       }, { merge: true });
+    } else if (exam.mode === 'test') {
+      // 💡 제출 완료 시 임시저장 내역 삭제
+      await deleteDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
     }
     setView('student-result');
   };
@@ -570,7 +612,7 @@ export default function App() {
 
         <main className="p-4 sm:p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col">
           
-          {/* 미로그인 화면 */}
+          {/* 미로그인 메인 화면 */}
           {view === 'home' && !userProfile && (
             <div className="flex flex-col items-center gap-12 py-10 sm:py-20 text-center flex-1 justify-center">
               <h2 className="text-3xl sm:text-5xl font-black text-slate-800">뷔르트 교육 센터</h2>
@@ -703,12 +745,17 @@ export default function App() {
 
               {adminTab === 'bank' && (
                 <div className="space-y-6">
-                  <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
+                  {/* 단건 등록 / 수정 영역 */}
+                  <div className={`p-6 sm:p-8 rounded-[2rem] border shadow-sm space-y-4 transition-colors ${editingBankId ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-blue-100'}`}>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
-                      <h3 className="font-bold text-blue-700">새로운 문제 보관하기</h3>
-                      <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
-                        <span>📊</span> CSV 엑셀로 한방에 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
-                      </label>
+                      <h3 className={`font-bold ${editingBankId ? 'text-yellow-700' : 'text-blue-700'}`}>
+                        {editingBankId ? '✏️ 저장고 문제 수정 중' : '새로운 문제 보관하기'}
+                      </h3>
+                      {!editingBankId && (
+                        <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
+                          <span>📊</span> CSV 엑셀로 한방에 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
+                        </label>
+                      )}
                     </div>
                     <input value={newBankQuestion.category} onChange={e => setNewBankQuestion({...newBankQuestion, category: e.target.value})} className="w-full bg-slate-50 border p-3 rounded-xl text-sm outline-none focus:border-blue-400" placeholder="카테고리 분류 (예: 화학제품, 공구, 엔진오일)"/>
                     <textarea value={newBankQuestion.text} onChange={e => setNewBankQuestion({...newBankQuestion, text: e.target.value})} className="w-full bg-slate-50 border p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-400" placeholder="문제 내용을 입력하세요" rows={2}/>
@@ -721,7 +768,14 @@ export default function App() {
                       ))}
                     </div>
                     <textarea value={newBankQuestion.explanation} onChange={e => setNewBankQuestion({...newBankQuestion, explanation: e.target.value})} className="w-full bg-slate-50 border p-2 rounded-xl text-xs outline-none" placeholder="오답 해설 (선택)"/>
-                    <button onClick={handleSaveBankQuestion} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold shadow-sm">저장고에 넣기</button>
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveBankQuestion} className={`w-full py-3 rounded-xl text-sm font-bold shadow-sm text-white ${editingBankId ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                        {editingBankId ? '수정 완료' : '저장고에 넣기'}
+                      </button>
+                      {editingBankId && (
+                        <button onClick={() => { setEditingBankId(null); setNewBankQuestion({ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }); }} className="w-1/3 py-3 rounded-xl text-sm font-bold bg-slate-200 text-slate-600">취소</button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="bg-slate-100 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -756,25 +810,28 @@ export default function App() {
                     )}
 
                     {filteredBank.map(q => (
-                      <label key={q.id} className={`bg-white p-5 rounded-2xl border flex gap-4 cursor-pointer transition-all items-start ${selectedBankIds.includes(q.id) ? 'border-blue-400 ring-2 ring-blue-50' : 'hover:border-blue-300'}`}>
-                        <input 
-                          type="checkbox" 
-                          checked={selectedBankIds.includes(q.id)} 
-                          onChange={e => {
-                            if(e.target.checked) {
-                              setSelectedBankIds(prev => Array.from(new Set([...prev, q.id])));
-                            } else {
-                              setSelectedBankIds(prev => prev.filter(id => id !== q.id));
-                            }
-                          }} 
-                          className="accent-blue-600 w-5 h-5 mt-1 cursor-pointer" 
-                        />
-                        <div className="flex-1">
-                          <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded font-black uppercase mb-2 inline-block">{q.category || '미분류'}</span>
-                          <p className="font-bold text-slate-800 leading-snug">{q.text}</p>
-                          <p className="text-xs text-slate-500 mt-2 bg-slate-50 inline-block px-2 py-1 rounded border">정답: {q.options[q.answerIndex]}</p>
+                      <div key={q.id} className={`bg-white p-5 rounded-2xl border flex flex-col sm:flex-row justify-between gap-4 transition-all items-start ${selectedBankIds.includes(q.id) ? 'border-blue-400 ring-2 ring-blue-50' : 'hover:border-blue-300'}`}>
+                        <label className="flex gap-4 cursor-pointer flex-1 w-full">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedBankIds.includes(q.id)} 
+                            onChange={e => {
+                              if(e.target.checked) setSelectedBankIds(prev => Array.from(new Set([...prev, q.id])));
+                              else setSelectedBankIds(prev => prev.filter(id => id !== q.id));
+                            }} 
+                            className="accent-blue-600 w-5 h-5 mt-1 cursor-pointer shrink-0" 
+                          />
+                          <div className="flex-1">
+                            <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded font-black uppercase mb-2 inline-block">{q.category || '미분류'}</span>
+                            <p className="font-bold text-slate-800 leading-snug">{q.text}</p>
+                            <p className="text-xs text-slate-500 mt-2 bg-slate-50 inline-block px-2 py-1 rounded border">정답: {q.options[q.answerIndex]}</p>
+                          </div>
+                        </label>
+                        {/* 💡 문제 오타 수정 버튼 추가 */}
+                        <div className="flex gap-2 self-end sm:self-center shrink-0">
+                           <button onClick={() => handleEditBankQuestion(q)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg font-bold transition-colors">✏️ 수정</button>
                         </div>
-                      </label>
+                      </div>
                     ))}
                     {filteredBank.length === 0 && <p className="text-center py-10 text-slate-400">조회된 문제가 없습니다.</p>}
                   </div>
@@ -993,8 +1050,12 @@ export default function App() {
             </div>
           )}
 
+          {/* 💡 학생 자율학습 진행 (임시저장 나가기 버튼) */}
           {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode !== 'test' && questionQueue.length > 0 && (
             <div className="max-w-xl mx-auto space-y-6 pb-20">
+              <div className="flex justify-end mb-4">
+                <button onClick={() => setView('home')} className="bg-slate-200 hover:bg-slate-300 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors">🚪 임시저장 후 나가기</button>
+              </div>
               <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
                 <h2 className="text-xl font-bold leading-relaxed">{questionQueue[0].q.text}</h2>
                 <div className="grid gap-3">
@@ -1014,14 +1075,18 @@ export default function App() {
             </div>
           )}
 
+          {/* 💡 학생 실전퀴즈 진행 (임시저장 나가기 버튼) */}
           {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode === 'test' && activeQuestions.length > 0 && (
             <div className="max-w-2xl mx-auto space-y-6 pb-20">
+              <div className="flex justify-end mb-4">
+                <button onClick={() => setView('home')} className="bg-slate-200 hover:bg-slate-300 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors">🚪 임시저장 후 나가기</button>
+              </div>
               {activeQuestions.map((q, qIndex) => (
                 <div key={qIndex} className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
                   <h4 className="text-lg font-bold leading-relaxed"><span className="text-blue-500 mr-2">Q{qIndex + 1}.</span>{q.text}</h4>
                   <div className="grid gap-3">
                     {q.options.map((opt, oi) => (
-                      <button key={oi} onClick={() => setTestAnswers({...testAnswers, [qIndex]: oi})} className={`text-left p-4 rounded-2xl border-2 font-bold transition-all ${testAnswers[qIndex] === oi ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 hover:bg-slate-50'}`}>
+                      <button key={oi} onClick={() => handleTestOptionClick(qIndex, oi)} className={`text-left p-4 rounded-2xl border-2 font-bold transition-all ${testAnswers[qIndex] === oi ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 hover:bg-slate-50'}`}>
                         {opt}
                       </button>
                     ))}
