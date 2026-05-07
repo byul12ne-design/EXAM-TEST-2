@@ -49,7 +49,7 @@ const db = getFirestore(app);
 
 // --- 인터페이스 정의 ---
 interface Question {
-  category?: string; // 카테고리 추가
+  category?: string;
   text: string;
   options: string[];
   answerIndex: number;
@@ -104,7 +104,6 @@ export default function App() {
   
   const [view, setView] = useState('home');
   const [adminTab, setAdminTab] = useState<'exams' | 'analytics' | 'bank'>('exams');
-  const [studentTab, setStudentTab] = useState<'study' | 'test'>('study'); // 학생 화면 좌/우 탭
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   const [currentExamId, setCurrentExamId] = useState('');
@@ -139,10 +138,10 @@ export default function App() {
     { category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }
   ]);
 
-  // 문제 저장고 상태
+  // 💡 문제 저장고 상태 (삭제 오류를 막기 위해 Set에서 Array로 변경)
   const [newBankQuestion, setNewBankQuestion] = useState<Question>({ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [selectedBankQuestions, setSelectedBankQuestions] = useState<Set<string>>(new Set());
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
   const [bankCategoryFilter, setBankCategoryFilter] = useState<string>('all');
 
   useEffect(() => {
@@ -201,7 +200,7 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
-  // --- 💡 사번 로그인 로직 (숫자 8자리 + WN 자동결합) ---
+  // --- 사번 로그인 로직 ---
   const handleStudentAuth = async () => {
     if (empIdInput.length !== 8) return showToast('사번 8자리 숫자를 입력해주세요.');
     
@@ -246,7 +245,7 @@ export default function App() {
       setEmpIdInput(''); setNameInput('');
       if (currentExamId) setView('student-entry'); 
     } catch (error: any) {
-      showToast('사번이 등록되지 않았거나 오류가 발생했습니다. 최초 등록을 확인해주세요.');
+      showToast('사번이 등록되지 않았거나 오류가 발생했습니다.');
     }
   };
 
@@ -306,42 +305,53 @@ export default function App() {
       }
       await setDoc(doc(db, 'exams', finalId), examData);
       setView('admin-dash'); 
-      showToast('저장 및 출시가 완료되었습니다.');
+      showToast('✅ 성공적으로 저장되었습니다.');
       resetAdminForm();
-    } catch (e) { showToast('저장 실패'); }
+    } catch (e) { 
+      console.error(e);
+      showToast('❌ 저장 실패! 권한을 확인하세요.'); 
+    }
   };
 
-  // --- 💡 문제 저장고 로직 ---
+  // --- 💡 문제 저장고 로직 (강력해진 에러 처리 및 삭제 로직) ---
   const handleSaveBankQuestion = async () => {
     if (!newBankQuestion.text.trim()) return showToast('문제를 입력해주세요.');
     try {
       await addDoc(collection(db, 'questionBank'), { ...newBankQuestion, category: newBankQuestion.category || '미분류', createdAt: Date.now() });
       setNewBankQuestion({ category: newBankQuestion.category, text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
-      showToast('문제 저장고에 추가되었습니다.');
-    } catch(e) { showToast('저장 실패'); }
+      showToast('✅ 문제 저장고에 추가되었습니다.');
+    } catch(e) { 
+      console.error(e);
+      showToast('❌ 저장 실패!'); 
+    }
   };
 
   const handleCreateQuizFromBank = () => {
-    const selected = questionBank.filter(q => selectedBankQuestions.has(q.id));
+    const selected = questionBank.filter(q => selectedBankIds.includes(q.id));
     if (selected.length === 0) return showToast('선택된 문제가 없습니다.');
     
     resetAdminForm();
-    // 저장고 문제 포맷을 Exam 문제 포맷으로 변환 (id, createdAt 제거)
     setNewQuestions(selected.map(({ id, createdAt, ...rest }) => rest));
     setView('admin-create');
-    setSelectedBankQuestions(new Set());
-    showToast(`${selected.length}개 문제로 새로운 세트를 구성합니다.`);
+    setSelectedBankIds([]); // 선택 초기화
+    setIsBankModalOpen(false);
+    showToast(`${selected.length}개 문제로 세트를 구성합니다.`);
   };
 
   const handleDeleteBankQuestions = async () => {
-    if (selectedBankQuestions.size === 0) return;
+    if (selectedBankIds.length === 0) return;
     if (!window.confirm('선택한 문제를 완전히 삭제하시겠습니까? (기존 구성된 학습 세트에는 영향을 주지 않습니다)')) return;
     
-    const batch = writeBatch(db);
-    selectedBankQuestions.forEach(id => batch.delete(doc(db, 'questionBank', id)));
-    await batch.commit();
-    setSelectedBankQuestions(new Set());
-    showToast('삭제되었습니다.');
+    try {
+      const batch = writeBatch(db);
+      selectedBankIds.forEach(id => batch.delete(doc(db, 'questionBank', id)));
+      await batch.commit();
+      setSelectedBankIds([]); // 완전 삭제 후 상태 비우기
+      showToast('✅ 삭제되었습니다.');
+    } catch (error) {
+      console.error("삭제 에러:", error);
+      showToast('❌ 삭제 실패! Firebase 보안 규칙(Rules)을 확인해주세요.');
+    }
   };
 
   // --- 학생 응시 로직 ---
@@ -444,7 +454,7 @@ export default function App() {
 
         <main className="p-4 sm:p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col">
           
-          {/* 💡 1. 미로그인 메인 화면 (사번/WN 고정 입력 복구) */}
+          {/* 미로그인 메인 화면 */}
           {view === 'home' && !userProfile && (
             <div className="flex flex-col items-center gap-12 py-10 sm:py-20 text-center flex-1 justify-center">
               <h2 className="text-3xl sm:text-5xl font-black text-slate-800">뷔르트 교육 센터</h2>
@@ -456,7 +466,6 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-4">
-                  {/* WN 고정 사번 입력 */}
                   <div className="flex items-center bg-slate-50 border rounded-2xl focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all overflow-hidden">
                     <span className="pl-5 pr-2 font-black text-slate-400">WN</span>
                     <input 
@@ -486,7 +495,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 2. 학생 홈 화면 (학습하기 / 퀴즈응시 좌우 분할 배치) */}
+          {/* 학생 홈 화면 (학습하기 / 퀴즈응시 좌우 분할 배치) */}
           {view === 'home' && userProfile && (
             <div className="py-6 sm:py-10 animate-fade-in-up w-full">
               <div className="mb-10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between">
@@ -496,7 +505,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 데스크탑: 좌우 분할, 모바일: 상하 분할 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 
                 {/* 왼쪽: 자율 학습하기 */}
@@ -555,7 +563,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 3. 관리자 영역 */}
+          {/* 관리자 영역 */}
           {view === 'admin-login' && (
             <div className="max-w-xs mx-auto py-20">
               <h2 className="text-2xl font-black text-center mb-8">관리자 접속</h2>
@@ -570,10 +578,9 @@ export default function App() {
               <div className="flex bg-white p-2 rounded-2xl border w-fit shadow-sm">
                 <button onClick={() => setAdminTab('exams')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'exams' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>학습/퀴즈 목록</button>
                 <button onClick={() => setAdminTab('bank')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'bank' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>🗃️ 문제 저장고</button>
-                <button onClick={() => setAdminTab('analytics')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'analytics' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>교육 분석</button>
               </div>
 
-              {/* 💡 문제 저장고 및 카테고리 관리 기능 */}
+              {/* 문제 저장고 및 카테고리 관리 기능 */}
               {adminTab === 'bank' && (
                 <div className="space-y-6">
                   {/* 단건 등록 */}
@@ -603,24 +610,31 @@ export default function App() {
                       </select>
                     </div>
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                      <button disabled={selectedBankQuestions.size === 0} onClick={handleCreateQuizFromBank} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankQuestions.size > 0 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
-                        선택 문제로 퀴즈 만들기
+                      <button disabled={selectedBankIds.length === 0} onClick={handleCreateQuizFromBank} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankIds.length > 0 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
+                        선택 문제로 세트 만들기
                       </button>
-                      <button disabled={selectedBankQuestions.size === 0} onClick={handleDeleteBankQuestions} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankQuestions.size > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-200 text-slate-400'}`}>
-                        선택 삭제 ({selectedBankQuestions.size})
+                      <button disabled={selectedBankIds.length === 0} onClick={handleDeleteBankQuestions} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankIds.length > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-200 text-slate-400'}`}>
+                        선택 삭제 ({selectedBankIds.length})
                       </button>
                     </div>
                   </div>
 
-                  {/* 문제 목록 */}
+                  {/* 💡 문제 목록 (체크박스 로직 Array 기반으로 완벽 수정) */}
                   <div className="grid gap-3">
                     {questionBank.filter(q => bankCategoryFilter === 'all' || (q.category || '미분류') === bankCategoryFilter).map(q => (
                       <label key={q.id} className="bg-white p-5 rounded-2xl border flex gap-4 cursor-pointer hover:border-blue-400 transition-all items-start">
-                        <input type="checkbox" checked={selectedBankQuestions.has(q.id)} onChange={e => {
-                          const n = new Set(selectedBankQuestions);
-                          if(e.target.checked) n.add(q.id); else n.delete(q.id);
-                          setSelectedBankQuestions(n);
-                        }} className="accent-blue-600 w-5 h-5 mt-1" />
+                        <input 
+                          type="checkbox" 
+                          checked={selectedBankIds.includes(q.id)} 
+                          onChange={e => {
+                            if(e.target.checked) {
+                              setSelectedBankIds(prev => [...prev, q.id]);
+                            } else {
+                              setSelectedBankIds(prev => prev.filter(id => id !== q.id));
+                            }
+                          }} 
+                          className="accent-blue-600 w-5 h-5 mt-1 cursor-pointer" 
+                        />
                         <div>
                           <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded font-black uppercase mb-2 inline-block">{q.category || '미분류'}</span>
                           <p className="font-bold text-slate-800 leading-snug">{q.text}</p>
@@ -649,7 +663,22 @@ export default function App() {
                         <div className="flex gap-2 w-full sm:w-auto">
                           <button onClick={() => copyToClipboard(ex.id)} className="flex-1 sm:flex-none px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors">링크복사</button>
                           <button onClick={() => handleEditExam(ex)} className="flex-1 sm:flex-none px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors">수정</button>
-                          <button onClick={async () => { if(window.confirm('삭제하시겠습니까?')) await deleteDoc(doc(db, 'exams', ex.id)); }} className="flex-1 sm:flex-none px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors">삭제</button>
+                          <button 
+                            onClick={async () => { 
+                              if(window.confirm('정말 삭제하시겠습니까?')) {
+                                try {
+                                  await deleteDoc(doc(db, 'exams', ex.id));
+                                  showToast('✅ 삭제 성공!');
+                                } catch(e) {
+                                  console.error(e);
+                                  showToast('❌ 삭제 실패! 권한을 확인하세요.');
+                                }
+                              }
+                            }} 
+                            className="flex-1 sm:flex-none px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            삭제
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -659,7 +688,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 4. 세트 생성/수정 (학습 vs 퀴즈 배치 선택 명확화) */}
+          {/* 세트 생성/수정 */}
           {view === 'admin-create' && (
             <div className="space-y-8 pb-20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -714,7 +743,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 응시 및 결과 화면은 이전 코드가 잘 작동하므로 그대로 활용 (축약) */}
+          {/* 학생 응시 화면 */}
           {view === 'student-entry' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-3xl font-black text-slate-800">{exams.find(e => e.id === currentExamId)?.title}</h2>
@@ -722,7 +751,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ... (student-take, student-result 부분은 이전 최적화 코드와 동일하게 처리) ... */}
           {view === 'student-take' && questionQueue.length > 0 && (
             <div className="max-w-xl mx-auto space-y-6 pb-20">
               <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
