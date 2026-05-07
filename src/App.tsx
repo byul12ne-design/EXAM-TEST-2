@@ -138,7 +138,7 @@ export default function App() {
     { category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }
   ]);
 
-  // 💡 문제 저장고 상태 (삭제 오류를 막기 위해 Set에서 Array로 변경)
+  // 문제 저장고 상태
   const [newBankQuestion, setNewBankQuestion] = useState<Question>({ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
@@ -313,7 +313,7 @@ export default function App() {
     }
   };
 
-  // --- 💡 문제 저장고 로직 (강력해진 에러 처리 및 삭제 로직) ---
+  // --- 문제 저장고 로직 ---
   const handleSaveBankQuestion = async () => {
     if (!newBankQuestion.text.trim()) return showToast('문제를 입력해주세요.');
     try {
@@ -333,7 +333,7 @@ export default function App() {
     resetAdminForm();
     setNewQuestions(selected.map(({ id, createdAt, ...rest }) => rest));
     setView('admin-create');
-    setSelectedBankIds([]); // 선택 초기화
+    setSelectedBankIds([]); 
     setIsBankModalOpen(false);
     showToast(`${selected.length}개 문제로 세트를 구성합니다.`);
   };
@@ -346,7 +346,7 @@ export default function App() {
       const batch = writeBatch(db);
       selectedBankIds.forEach(id => batch.delete(doc(db, 'questionBank', id)));
       await batch.commit();
-      setSelectedBankIds([]); // 완전 삭제 후 상태 비우기
+      setSelectedBankIds([]); 
       showToast('✅ 삭제되었습니다.');
     } catch (error) {
       console.error("삭제 에러:", error);
@@ -495,7 +495,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 홈 화면 (학습하기 / 퀴즈응시 좌우 분할 배치) */}
+          {/* 학생 홈 화면 */}
           {view === 'home' && userProfile && (
             <div className="py-6 sm:py-10 animate-fade-in-up w-full">
               <div className="mb-10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between">
@@ -563,7 +563,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 관리자 영역 */}
+          {/* 관리자 로그인 */}
           {view === 'admin-login' && (
             <div className="max-w-xs mx-auto py-20">
               <h2 className="text-2xl font-black text-center mb-8">관리자 접속</h2>
@@ -573,6 +573,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 관리자 대시보드 */}
           {view === 'admin-dash' && (
             <div className="space-y-6">
               <div className="flex bg-white p-2 rounded-2xl border w-fit shadow-sm">
@@ -580,10 +581,8 @@ export default function App() {
                 <button onClick={() => setAdminTab('bank')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'bank' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>🗃️ 문제 저장고</button>
               </div>
 
-              {/* 문제 저장고 및 카테고리 관리 기능 */}
               {adminTab === 'bank' && (
                 <div className="space-y-6">
-                  {/* 단건 등록 */}
                   <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
                     <h3 className="font-bold text-blue-700 mb-2">새로운 문제 저장고에 보관하기</h3>
                     <input value={newBankQuestion.category} onChange={e => setNewBankQuestion({...newBankQuestion, category: e.target.value})} className="w-full bg-slate-50 border p-3 rounded-xl text-sm outline-none focus:border-blue-400" placeholder="카테고리 분류 (예: 화학제품, 공구, 엔진오일)"/>
@@ -600,7 +599,6 @@ export default function App() {
                     <button onClick={handleSaveBankQuestion} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold shadow-sm">저장고에 넣기</button>
                   </div>
 
-                  {/* 목록 및 관리 툴바 */}
                   <div className="bg-slate-100 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       <span className="text-sm font-bold text-slate-600">분류 필터:</span>
@@ -611,7 +609,7 @@ export default function App() {
                     </div>
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                       <button disabled={selectedBankIds.length === 0} onClick={handleCreateQuizFromBank} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankIds.length > 0 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
-                        선택 문제로 세트 만들기
+                        선택 문제로 퀴즈 만들기
                       </button>
                       <button disabled={selectedBankIds.length === 0} onClick={handleDeleteBankQuestions} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex-1 sm:flex-none transition-colors ${selectedBankIds.length > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-200 text-slate-400'}`}>
                         선택 삭제 ({selectedBankIds.length})
@@ -619,7 +617,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 💡 문제 목록 (체크박스 로직 Array 기반으로 완벽 수정) */}
                   <div className="grid gap-3">
                     {questionBank.filter(q => bankCategoryFilter === 'all' || (q.category || '미분류') === bankCategoryFilter).map(q => (
                       <label key={q.id} className="bg-white p-5 rounded-2xl border flex gap-4 cursor-pointer hover:border-blue-400 transition-all items-start">
@@ -649,7 +646,8 @@ export default function App() {
 
               {adminTab === 'exams' && (
                 <div className="space-y-4">
-                  <button onClick={resetAdminForm} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md">➕ 새로운 학습/퀴즈 세트 만들기</button>
+                  {/* 💡 화면 이동 수정 적용 부분 */}
+                  <button onClick={() => { resetAdminForm(); setView('admin-create'); }} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md">➕ 새로운 학습/퀴즈 세트 만들기</button>
                   <div className="grid gap-3">
                     {exams.map(ex => (
                       <div key={ex.id} className="bg-white p-6 rounded-2xl border flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
