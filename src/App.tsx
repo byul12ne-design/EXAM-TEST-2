@@ -136,7 +136,6 @@ export default function App() {
     { category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }
   ]);
 
-  // 문제 저장고 상태
   const [newBankQuestion, setNewBankQuestion] = useState<Question>({ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' });
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
@@ -157,7 +156,6 @@ export default function App() {
     }
   }, []);
 
-  // 💡 데이터 로드 분리 (간섭 및 에러 방지)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -172,37 +170,38 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 💡 데이터 로드 완벽 수정 (Firebase Index 에러 원천 차단)
   useEffect(() => {
     if (!user) return;
+    
+    // 시험 목록 불러오기
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
-      const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)).sort((a, b) => b.createdAt - a.createdAt);
+      const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
+      loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); // 프론트엔드 정렬
       setExams(loadedExams);
-      setSelectedAnalyticsExamId(prev => prev || (loadedExams.length > 0 ? loadedExams[0].id : ''));
+      if (loadedExams.length > 0 && !selectedAnalyticsExamId) {
+        setSelectedAnalyticsExamId(loadedExams[0].id);
+      }
     });
-    return () => unsubExams();
-  }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
+    // 결과 목록 불러오기
     const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
-      setResults(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult)).sort((a, b) => b.createdAt - a.createdAt));
+      const loadedResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult));
+      loadedResults.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setResults(loadedResults);
     });
-    return () => unsubResults();
-  }, [user]);
 
-  // 💡 문제 저장고 데이터 호출 강화 (서버 정렬 오류 프론트에서 해결)
-  useEffect(() => {
-    if (!user) return;
+    // 💡 문제 저장고 불러오기 (orderBy 제거, 프론트엔드 정렬)
     const unsubBank = onSnapshot(collection(db, 'questionBank'), (snapshot) => {
-      const bankData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
-      // 여기서 프론트엔드에서 최신순 정렬을 수행 (서버 에러 원천 차단)
-      bankData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setQuestionBank(bankData);
+      const loadedBank = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
+      loadedBank.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setQuestionBank(loadedBank);
     }, (error) => {
-      console.error("문제 저장고 로드 에러:", error);
+      console.error("Firestore Load Error:", error);
     });
-    return () => unsubBank();
-  }, [user]);
+
+    return () => { unsubExams(); unsubResults(); unsubBank(); };
+  }, [user, selectedAnalyticsExamId]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -215,7 +214,7 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
-  // CSV 파싱 로직
+  // --- CSV 파싱 (헤더줄 무시 기능 추가) ---
   const parseCSV = (text: string) => {
     const rows = [];
     const lines = text.split(/\r?\n/);
@@ -235,13 +234,18 @@ export default function App() {
       cols.push(cur.replace(/^"|"$/g, '').trim());
       rows.push(cols);
     }
-    return rows.map(cols => ({
-      text: cols[0] || '', 
-      options: [cols[1] || '', cols[2] || '', cols[3] || '', cols[4] || ''], 
-      answerIndex: parseInt(cols[5]) - 1 || 0,
-      explanation: cols[6] || '',
-      category: cols[7] || '미분류'
-    })).filter(q => q.text && q.options.length >= 4 && !isNaN(q.answerIndex));
+    
+    return rows.map(cols => {
+      const parsedAns = parseInt(cols[5]);
+      return {
+        text: cols[0] || '', 
+        options: [cols[1] || '', cols[2] || '', cols[3] || '', cols[4] || ''], 
+        answerIndex: isNaN(parsedAns) ? 0 : parsedAns - 1,
+        explanation: cols[6] || '',
+        category: cols[7] || '미분류'
+      };
+    }).filter(q => q.text && q.text !== '문제' && q.options.length >= 4 && q.options[0] !== '보기1'); 
+    // 맨 윗줄(문제, 보기1..) 헤더 무시
   };
 
   const handleBankFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -260,7 +264,7 @@ export default function App() {
           await batch.commit();
           showToast(`✅ 저장고에 ${parsedFromFile.length}문제가 등록되었습니다!`); 
         } catch(error) {
-          showToast('❌ 업로드 중 오류가 발생했습니다. 권한을 확인하세요.');
+          showToast('❌ 업로드 오류! (규칙 권한을 확인하세요)');
         }
       } else {
         showToast('❌ 파일에서 문제를 찾을 수 없습니다.');
@@ -286,7 +290,6 @@ export default function App() {
     e.target.value = ''; 
   };
 
-  // 필터 및 전체 선택 로직
   const filteredBank = useMemo(() => {
     return questionBank.filter(q => bankCategoryFilter === 'all' || (q.category || '미분류') === bankCategoryFilter);
   }, [questionBank, bankCategoryFilter]);
@@ -659,7 +662,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
               </div>
             </div>
           )}
@@ -682,15 +684,14 @@ export default function App() {
                 <button onClick={() => setAdminTab('bank')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'bank' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>🗃️ 문제 저장고</button>
               </div>
 
-              {/* 문제 저장고 */}
               {adminTab === 'bank' && (
                 <div className="space-y-6">
-                  {/* 상단 툴바: CSV 업로드 및 단건 등록 */}
+                  {/* 단건 등록 영역 */}
                   <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
-                      <h3 className="font-bold text-blue-700">새로운 문제 저장고에 보관하기</h3>
-                      <label className="bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
-                        <span>📊</span> CSV 엑셀 대량 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="font-bold text-blue-700">새로운 문제 보관하기</h3>
+                      <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
+                        <span>📊</span> CSV 엑셀로 한방에 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
                       </label>
                     </div>
                     <input value={newBankQuestion.category} onChange={e => setNewBankQuestion({...newBankQuestion, category: e.target.value})} className="w-full bg-slate-50 border p-3 rounded-xl text-sm outline-none focus:border-blue-400" placeholder="카테고리 분류 (예: 화학제품, 공구, 엔진오일)"/>
@@ -766,7 +767,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* 학습/퀴즈 목록 */}
               {adminTab === 'exams' && (
                 <div className="space-y-4">
                   <button onClick={() => { resetAdminForm(); setView('admin-create'); }} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md">➕ 새로운 학습/퀴즈 세트 만들기</button>
@@ -915,7 +915,7 @@ export default function App() {
                           className="w-5 h-5 cursor-pointer accent-blue-600"
                         />
                       </div>
-                      <div className="flex-1">
+                      <div>
                         <div className="flex gap-2 mb-1">
                           <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase">{q.category || '미분류'}</span>
                         </div>
