@@ -96,6 +96,7 @@ interface UserProfile {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [questionBank, setQuestionBank] = useState<BankQuestion[]>([]);
@@ -156,6 +157,7 @@ export default function App() {
     }
   }, []);
 
+  // 인증 리스너
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -170,38 +172,34 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 💡 데이터 로드 완벽 수정 (Firebase Index 에러 원천 차단)
+  // 💡 [핵심 수정] 데이터 로드 (관리자도 데이터를 볼 수 있도록 user 조건문 제거)
   useEffect(() => {
-    if (!user) return;
-    
-    // 시험 목록 불러오기
+    // 1. 시험(세트) 목록 불러오기
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
-      loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); // 프론트엔드 정렬
+      loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); // 최신순 정렬
       setExams(loadedExams);
       if (loadedExams.length > 0 && !selectedAnalyticsExamId) {
         setSelectedAnalyticsExamId(loadedExams[0].id);
       }
-    });
+    }, (error) => console.error("Exams 로드 에러:", error));
 
-    // 결과 목록 불러오기
+    // 2. 결과 목록 불러오기
     const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
       const loadedResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult));
       loadedResults.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setResults(loadedResults);
-    });
+    }, (error) => console.error("Results 로드 에러:", error));
 
-    // 💡 문제 저장고 불러오기 (orderBy 제거, 프론트엔드 정렬)
+    // 3. 문제 저장고 불러오기
     const unsubBank = onSnapshot(collection(db, 'questionBank'), (snapshot) => {
       const loadedBank = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
       loadedBank.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setQuestionBank(loadedBank);
-    }, (error) => {
-      console.error("Firestore Load Error:", error);
-    });
+    }, (error) => console.error("Bank 로드 에러:", error));
 
     return () => { unsubExams(); unsubResults(); unsubBank(); };
-  }, [user, selectedAnalyticsExamId]);
+  }, [selectedAnalyticsExamId]); // user 종속성 제거!
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -214,7 +212,7 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
-  // --- CSV 파싱 (헤더줄 무시 기능 추가) ---
+  // CSV 파싱
   const parseCSV = (text: string) => {
     const rows = [];
     const lines = text.split(/\r?\n/);
@@ -245,7 +243,6 @@ export default function App() {
         category: cols[7] || '미분류'
       };
     }).filter(q => q.text && q.text !== '문제' && q.options.length >= 4 && q.options[0] !== '보기1'); 
-    // 맨 윗줄(문제, 보기1..) 헤더 무시
   };
 
   const handleBankFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,6 +287,7 @@ export default function App() {
     e.target.value = ''; 
   };
 
+  // 필터 및 전체 선택 로직
   const filteredBank = useMemo(() => {
     return questionBank.filter(q => bankCategoryFilter === 'all' || (q.category || '미분류') === bankCategoryFilter);
   }, [questionBank, bankCategoryFilter]);
@@ -310,6 +308,7 @@ export default function App() {
     }
   };
 
+  // 인증
   const handleStudentAuth = async () => {
     if (empIdInput.length !== 8) return showToast('사번 8자리 숫자를 입력해주세요.');
     
@@ -462,6 +461,7 @@ export default function App() {
     }
   };
 
+  // --- 학생 응시 로직 ---
   const startExam = async () => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
@@ -684,14 +684,15 @@ export default function App() {
                 <button onClick={() => setAdminTab('bank')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'bank' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>🗃️ 문제 저장고</button>
               </div>
 
+              {/* 문제 저장고 */}
               {adminTab === 'bank' && (
                 <div className="space-y-6">
                   {/* 단건 등록 영역 */}
                   <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-bold text-blue-700">새로운 문제 보관하기</h3>
-                      <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
-                        <span>📊</span> CSV 엑셀로 한방에 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
+                      <h3 className="font-bold text-blue-700">새로운 문제 저장고에 보관하기</h3>
+                      <label className="bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
+                        <span>📊</span> CSV 엑셀 대량 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
                       </label>
                     </div>
                     <input value={newBankQuestion.category} onChange={e => setNewBankQuestion({...newBankQuestion, category: e.target.value})} className="w-full bg-slate-50 border p-3 rounded-xl text-sm outline-none focus:border-blue-400" placeholder="카테고리 분류 (예: 화학제품, 공구, 엔진오일)"/>
@@ -727,7 +728,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 💡 전체 선택 및 목록 렌더링 */}
+                  {/* 💡 문제 목록 및 전체 선택 */}
                   <div className="grid gap-3">
                     {filteredBank.length > 0 && (
                       <label className="bg-slate-200 p-4 rounded-2xl flex gap-4 cursor-pointer hover:bg-slate-300 transition-all items-center shadow-sm">
@@ -737,7 +738,7 @@ export default function App() {
                           onChange={(e) => handleToggleSelectAll(e.target.checked)} 
                           className="accent-blue-600 w-5 h-5 cursor-pointer" 
                         />
-                        <span className="font-black text-slate-800 text-sm">현재 필터링된 {filteredBank.length}개 문제 전체 선택</span>
+                        <span className="font-black text-slate-800 text-sm">현재 목록에 있는 {filteredBank.length}개 문제 전체 선택</span>
                       </label>
                     )}
 
@@ -767,10 +768,12 @@ export default function App() {
                 </div>
               )}
 
+              {/* 학습/퀴즈 목록 */}
               {adminTab === 'exams' && (
                 <div className="space-y-4">
                   <button onClick={() => { resetAdminForm(); setView('admin-create'); }} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md">➕ 새로운 학습/퀴즈 세트 만들기</button>
                   <div className="grid gap-3">
+                    {exams.length === 0 && <p className="text-center py-10 text-slate-400">등록된 세트가 없습니다.</p>}
                     {exams.map(ex => (
                       <div key={ex.id} className="bg-white p-6 rounded-2xl border flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
                         <div>
@@ -808,7 +811,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 세트 생성/수정 화면 (이곳에도 CSV 버튼 복구됨) */}
+          {/* 세트 생성/수정 화면 */}
           {view === 'admin-create' && (
             <div className="space-y-8 pb-20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -889,7 +892,6 @@ export default function App() {
                 </div>
 
                 <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-6">
-                  {/* 💡 모달창 전체 선택 버튼 */}
                   {filteredBank.length > 0 && (
                     <label className="bg-slate-200 p-4 rounded-2xl flex gap-4 cursor-pointer hover:bg-slate-300 transition-all items-center shadow-sm">
                       <input 
@@ -915,7 +917,7 @@ export default function App() {
                           className="w-5 h-5 cursor-pointer accent-blue-600"
                         />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <div className="flex gap-2 mb-1">
                           <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase">{q.category || '미분류'}</span>
                         </div>
@@ -945,7 +947,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 학생 응시 화면 */}
+          {/* 학생 대기실 */}
           {view === 'student-entry' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-3xl font-black text-slate-800">{exams.find(e => e.id === currentExamId)?.title}</h2>
@@ -953,7 +955,8 @@ export default function App() {
             </div>
           )}
 
-          {view === 'student-take' && questionQueue.length > 0 && (
+          {/* 학생 자율학습 진행 */}
+          {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode !== 'test' && questionQueue.length > 0 && (
             <div className="max-w-xl mx-auto space-y-6 pb-20">
               <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
                 <h2 className="text-xl font-bold leading-relaxed">{questionQueue[0].q.text}</h2>
@@ -962,11 +965,38 @@ export default function App() {
                     <button key={i} onClick={() => { if(!isAnswerChecked) { setCurrentSelectedOption(i); setIsAnswerChecked(true); } }} className={`text-left p-5 rounded-2xl border-2 font-bold transition-all ${isAnswerChecked ? (i === questionQueue[0].q.answerIndex ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : (i === currentSelectedOption ? 'border-red-500 bg-red-50 text-red-700' : 'opacity-40 border-slate-100')) : 'hover:border-blue-400 hover:bg-blue-50 border-slate-100'}`}>{i+1}. {opt}</button>
                   ))}
                 </div>
-                {isAnswerChecked && <button onClick={handleStudyNextQuestion} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold mt-4 shadow-lg active:scale-95 transition-all">다음 문제</button>}
+                {isAnswerChecked && (
+                  <div className="animate-fade-in-up mt-4">
+                    {questionQueue[0].q.explanation && (
+                      <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border mb-4">💡 {questionQueue[0].q.explanation}</p>
+                    )}
+                    <button onClick={handleStudyNextQuestion} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">다음 문제</button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
+          {/* 학생 실전퀴즈 진행 */}
+          {view === 'student-take' && exams.find(e => e.id === currentExamId)?.mode === 'test' && activeQuestions.length > 0 && (
+            <div className="max-w-2xl mx-auto space-y-6 pb-20">
+              {activeQuestions.map((q, qIndex) => (
+                <div key={qIndex} className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
+                  <h4 className="text-lg font-bold leading-relaxed"><span className="text-blue-500 mr-2">Q{qIndex + 1}.</span>{q.text}</h4>
+                  <div className="grid gap-3">
+                    {q.options.map((opt, oi) => (
+                      <button key={oi} onClick={() => setTestAnswers({...testAnswers, [qIndex]: oi})} className={`text-left p-4 rounded-2xl border-2 font-bold transition-all ${testAnswers[qIndex] === oi ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 hover:bg-slate-50'}`}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => submitExam(testAnswers)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all">전체 답안 제출하기</button>
+            </div>
+          )}
+
+          {/* 결과 화면 */}
           {view === 'student-result' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-4xl font-black text-slate-800">수고하셨습니다!</h2>
