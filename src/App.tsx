@@ -19,9 +19,7 @@ import {
   setDoc, 
   getDoc, 
   writeBatch, 
-  arrayUnion, 
-  query, 
-  orderBy 
+  arrayUnion
 } from 'firebase/firestore';
 
 // ==========================================
@@ -159,6 +157,7 @@ export default function App() {
     }
   }, []);
 
+  // 💡 데이터 로드 분리 (간섭 및 에러 방지)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -178,16 +177,32 @@ export default function App() {
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)).sort((a, b) => b.createdAt - a.createdAt);
       setExams(loadedExams);
-      if (loadedExams.length > 0 && !selectedAnalyticsExamId) setSelectedAnalyticsExamId(loadedExams[0].id);
+      setSelectedAnalyticsExamId(prev => prev || (loadedExams.length > 0 ? loadedExams[0].id : ''));
     });
+    return () => unsubExams();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
     const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
       setResults(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult)).sort((a, b) => b.createdAt - a.createdAt));
     });
-    const unsubBank = onSnapshot(query(collection(db, 'questionBank'), orderBy('createdAt', 'desc')), (snapshot) => {
-      setQuestionBank(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion)));
+    return () => unsubResults();
+  }, [user]);
+
+  // 💡 문제 저장고 데이터 호출 강화 (서버 정렬 오류 프론트에서 해결)
+  useEffect(() => {
+    if (!user) return;
+    const unsubBank = onSnapshot(collection(db, 'questionBank'), (snapshot) => {
+      const bankData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
+      // 여기서 프론트엔드에서 최신순 정렬을 수행 (서버 에러 원천 차단)
+      bankData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setQuestionBank(bankData);
+    }, (error) => {
+      console.error("문제 저장고 로드 에러:", error);
     });
-    return () => { unsubExams(); unsubResults(); unsubBank(); };
-  }, [user, selectedAnalyticsExamId]);
+    return () => unsubBank();
+  }, [user]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -200,7 +215,7 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
-  // --- 💡 CSV 파싱 및 대량 업로드 로직 원상 복구 ---
+  // CSV 파싱 로직
   const parseCSV = (text: string) => {
     const rows = [];
     const lines = text.split(/\r?\n/);
@@ -220,7 +235,6 @@ export default function App() {
       cols.push(cur.replace(/^"|"$/g, '').trim());
       rows.push(cols);
     }
-    // 컬럼: 문제, 보기1, 보기2, 보기3, 보기4, 정답번호, 해설, 카테고리
     return rows.map(cols => ({
       text: cols[0] || '', 
       options: [cols[1] || '', cols[2] || '', cols[3] || '', cols[4] || ''], 
@@ -244,10 +258,12 @@ export default function App() {
             batch.set(docRef, { ...q, createdAt: Date.now() });
           });
           await batch.commit();
-          showToast(`저장고에 ${parsedFromFile.length}문제가 등록되었습니다!`); 
+          showToast(`✅ 저장고에 ${parsedFromFile.length}문제가 등록되었습니다!`); 
         } catch(error) {
-          showToast('업로드 중 오류가 발생했습니다.');
+          showToast('❌ 업로드 중 오류가 발생했습니다. 권한을 확인하세요.');
         }
+      } else {
+        showToast('❌ 파일에서 문제를 찾을 수 없습니다.');
       }
     };
     reader.readAsText(file);
@@ -263,14 +279,14 @@ export default function App() {
       if (parsedFromFile.length > 0) { 
         const existingNotEmpty = newQuestions.filter(q => q.text.trim() !== '');
         setNewQuestions([...existingNotEmpty, ...parsedFromFile]); 
-        showToast(`${parsedFromFile.length}문제가 세트에 추가되었습니다!`); 
+        showToast(`✅ ${parsedFromFile.length}문제가 세트에 추가되었습니다!`); 
       }
     };
     reader.readAsText(file);
     e.target.value = ''; 
   };
-  // ----------------------------------------------------
 
+  // 필터 및 전체 선택 로직
   const filteredBank = useMemo(() => {
     return questionBank.filter(q => bankCategoryFilter === 'all' || (q.category || '미분류') === bankCategoryFilter);
   }, [questionBank, bankCategoryFilter]);
@@ -541,6 +557,7 @@ export default function App() {
 
         <main className="p-4 sm:p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col">
           
+          {/* 미로그인 메인 화면 */}
           {view === 'home' && !userProfile && (
             <div className="flex flex-col items-center gap-12 py-10 sm:py-20 text-center flex-1 justify-center">
               <h2 className="text-3xl sm:text-5xl font-black text-slate-800">뷔르트 교육 센터</h2>
@@ -581,6 +598,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 학생 홈 화면 */}
           {view === 'home' && userProfile && (
             <div className="py-6 sm:py-10 animate-fade-in-up w-full">
               <div className="mb-10 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between">
@@ -591,6 +609,7 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                
                 <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl">📖</div>
@@ -640,10 +659,12 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
               </div>
             </div>
           )}
 
+          {/* 관리자 로그인 */}
           {view === 'admin-login' && (
             <div className="max-w-xs mx-auto py-20">
               <h2 className="text-2xl font-black text-center mb-8">관리자 접속</h2>
@@ -653,6 +674,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 관리자 대시보드 */}
           {view === 'admin-dash' && (
             <div className="space-y-6">
               <div className="flex bg-white p-2 rounded-2xl border w-fit shadow-sm">
@@ -660,13 +682,14 @@ export default function App() {
                 <button onClick={() => setAdminTab('bank')} className={`px-5 py-2 rounded-xl text-sm font-bold ${adminTab === 'bank' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>🗃️ 문제 저장고</button>
               </div>
 
+              {/* 문제 저장고 */}
               {adminTab === 'bank' && (
                 <div className="space-y-6">
-                  {/* 단건 등록 영역 */}
+                  {/* 상단 툴바: CSV 업로드 및 단건 등록 */}
                   <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-blue-100 shadow-sm space-y-4">
-                    <div className="flex justify-between items-center mb-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-4">
                       <h3 className="font-bold text-blue-700">새로운 문제 저장고에 보관하기</h3>
-                      <label className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
+                      <label className="bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold cursor-pointer hover:bg-green-700 transition-all text-xs shadow-md whitespace-nowrap">
                         <span>📊</span> CSV 엑셀 대량 업로드<input type="file" accept=".csv" className="hidden" onChange={handleBankFileUpload} />
                       </label>
                     </div>
@@ -690,7 +713,7 @@ export default function App() {
                       <span className="text-sm font-bold text-slate-600">분류 필터:</span>
                       <select value={bankCategoryFilter} onChange={e => setBankCategoryFilter(e.target.value)} className="p-2 rounded-xl border outline-none font-bold text-sm bg-white flex-1 sm:w-40">
                         <option value="all">전체보기</option>
-                        {Array.from(new Set(questionBank.map(q => q.category || '미분류'))).map(c => <option key={c} value={c}>{c}</option>)}
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -703,7 +726,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 목록 표시 영역 */}
+                  {/* 💡 전체 선택 및 목록 렌더링 */}
                   <div className="grid gap-3">
                     {filteredBank.length > 0 && (
                       <label className="bg-slate-200 p-4 rounded-2xl flex gap-4 cursor-pointer hover:bg-slate-300 transition-all items-center shadow-sm">
@@ -731,18 +754,19 @@ export default function App() {
                           }} 
                           className="accent-blue-600 w-5 h-5 mt-1 cursor-pointer" 
                         />
-                        <div>
+                        <div className="flex-1">
                           <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded font-black uppercase mb-2 inline-block">{q.category || '미분류'}</span>
                           <p className="font-bold text-slate-800 leading-snug">{q.text}</p>
                           <p className="text-xs text-slate-500 mt-2 bg-slate-50 inline-block px-2 py-1 rounded border">정답: {q.options[q.answerIndex]}</p>
                         </div>
                       </label>
                     ))}
-                    {questionBank.length === 0 && <p className="text-center py-10 text-slate-400">저장고가 비어있습니다.</p>}
+                    {filteredBank.length === 0 && <p className="text-center py-10 text-slate-400">조회된 문제가 없습니다.</p>}
                   </div>
                 </div>
               )}
 
+              {/* 학습/퀴즈 목록 */}
               {adminTab === 'exams' && (
                 <div className="space-y-4">
                   <button onClick={() => { resetAdminForm(); setView('admin-create'); }} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-md">➕ 새로운 학습/퀴즈 세트 만들기</button>
@@ -784,6 +808,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 💡 세트 생성/수정 화면 (이곳에도 CSV 버튼 복구됨) */}
           {view === 'admin-create' && (
             <div className="space-y-8 pb-20">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -812,11 +837,11 @@ export default function App() {
               </div>
 
               <div className="bg-white p-6 rounded-[2rem] border shadow-sm">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
                   <span className="text-xs font-black text-slate-400 tracking-widest uppercase">📝 출제할 문제 목록 (총 {newQuestions.length}개)</span>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <label className="text-xs bg-green-600 text-white px-3 py-1.5 rounded font-bold hover:bg-green-700 cursor-pointer transition-colors shadow-sm">
-                       📊 CSV 파일로 덮어쓰기<input type="file" accept=".csv" className="hidden" onChange={handleExamFileUpload} />
+                       📊 CSV로 바로 추가<input type="file" accept=".csv" className="hidden" onChange={handleExamFileUpload} />
                     </label>
                     <button onClick={() => setIsBankModalOpen(true)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded font-bold hover:bg-blue-100 transition-colors">🗃️ 저장고에서 불러오기</button>
                     <button onClick={() => setNewQuestions([...newQuestions, {category:'', text:'', options:['','','',''], answerIndex:0, explanation:''}])} className="text-xs bg-slate-100 px-3 py-1.5 rounded font-bold hover:bg-slate-200">+ 수동 빈 문항 추가</button>
@@ -844,6 +869,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 창고에서 문제 불러오기 모달 */}
           {isBankModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-[2rem] p-6 sm:p-8 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
@@ -863,6 +889,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-6">
+                  {/* 💡 모달창 전체 선택 버튼 */}
                   {filteredBank.length > 0 && (
                     <label className="bg-slate-200 p-4 rounded-2xl flex gap-4 cursor-pointer hover:bg-slate-300 transition-all items-center shadow-sm">
                       <input 
@@ -888,7 +915,7 @@ export default function App() {
                           className="w-5 h-5 cursor-pointer accent-blue-600"
                         />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <div className="flex gap-2 mb-1">
                           <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase">{q.category || '미분류'}</span>
                         </div>
@@ -918,6 +945,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 학생 응시 화면 */}
           {view === 'student-entry' && (
             <div className="py-20 text-center space-y-6">
               <h2 className="text-3xl font-black text-slate-800">{exams.find(e => e.id === currentExamId)?.title}</h2>
