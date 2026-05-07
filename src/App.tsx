@@ -19,9 +19,7 @@ import {
   setDoc, 
   getDoc, 
   writeBatch, 
-  arrayUnion, 
-  query, 
-  orderBy 
+  arrayUnion
 } from 'firebase/firestore';
 
 // ==========================================
@@ -158,6 +156,7 @@ export default function App() {
     }
   }, []);
 
+  // 인증
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -172,32 +171,35 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 💡 데이터 로드 (user 검사 없앰! 누구나 볼 수 있도록 허용)
   useEffect(() => {
-    if (!user) return;
-    
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const loadedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       loadedExams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
       setExams(loadedExams);
-      if (loadedExams.length > 0 && !selectedAnalyticsExamId) {
-        setSelectedAnalyticsExamId(loadedExams[0].id);
-      }
-    }, (error) => console.error(error));
+    }, (error) => console.error("Exams 로드 에러:", error));
 
     const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
       const loadedResults = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamResult));
       loadedResults.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setResults(loadedResults);
-    }, (error) => console.error(error));
+    }, (error) => console.error("Results 로드 에러:", error));
 
     const unsubBank = onSnapshot(collection(db, 'questionBank'), (snapshot) => {
       const loadedBank = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BankQuestion));
       loadedBank.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setQuestionBank(loadedBank);
-    }, (error) => console.error(error));
+    }, (error) => console.error("Bank 로드 에러:", error));
 
     return () => { unsubExams(); unsubResults(); unsubBank(); };
-  }, [selectedAnalyticsExamId]); 
+  }, []); 
+
+  // exams 로드 후 selectedAnalyticsExamId 자동 세팅
+  useEffect(() => {
+    if (exams.length > 0 && !selectedAnalyticsExamId) {
+      setSelectedAnalyticsExamId(exams[0].id);
+    }
+  }, [exams, selectedAnalyticsExamId]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -210,6 +212,7 @@ export default function App() {
     showToast('링크가 복사되었습니다!');
   };
 
+  // CSV 파싱
   const parseCSV = (text: string) => {
     const rows = [];
     const lines = text.split(/\r?\n/);
@@ -457,7 +460,6 @@ export default function App() {
     }
   };
 
-  // 💡 자율 학습 진행도 초기화 기능
   const handleResetProgress = async (examId: string) => {
     if (!userProfile) return;
     if (window.confirm('지금까지 맞춘 학습 기록을 모두 초기화하고 모든 문제를 처음부터 다시 푸시겠습니까?')) {
@@ -621,7 +623,6 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 
-                {/* 💡 왼쪽: 자율 학습하기 (초기화 버튼 추가) */}
                 <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl">📖</div>
@@ -652,7 +653,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 오른쪽: 실전 퀴즈 응시 */}
                 <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-2xl">🏆</div>
