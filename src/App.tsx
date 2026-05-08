@@ -67,8 +67,8 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState(''); 
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]); 
   const [studentScore, setStudentScore] = useState(0);
-  const [lastResult, setLastResult] = useState<ExamResult | null>(null); // 방금 푼 결과지 저장용
-  const [selectedResultDetail, setSelectedResultDetail] = useState<ExamResult | null>(null); // 관리자용 상세 조회
+  const [lastResult, setLastResult] = useState<ExamResult | null>(null); 
+  const [selectedResultDetail, setSelectedResultDetail] = useState<ExamResult | null>(null); 
 
   const [questionQueue, setQuestionQueue] = useState<{q: Question, originalIndex: number}[]>([]); 
   const [isAnswerChecked, setIsAnswerChecked] = useState(false); 
@@ -81,7 +81,10 @@ export default function App() {
   const [displayCount, setDisplayCount] = useState('');
   const [newQuestions, setNewQuestions] = useState<Question[]>([{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]);
 
-  // 💡 빠른 화면 로딩을 위한 스타일 상태
+  // 💡 통계 데이터 관리용 상태 추가
+  const [resultFilterExamId, setResultFilterExamId] = useState<string>('all');
+  const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
+
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
 
   useEffect(() => {
@@ -179,6 +182,63 @@ export default function App() {
     } catch(e) { showToast('저장 실패'); }
   };
 
+  const toggleVisibility = async (examId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'exams', examId), { isVisible: !currentStatus });
+      showToast(currentStatus ? '비공개 처리됨' : '출시 완료!');
+    } catch (e) { showToast('오류 발생'); }
+  };
+
+  // 💡 통계: 필터링된 결과 데이터
+  const filteredResults = useMemo(() => {
+    return results.filter(r => resultFilterExamId === 'all' || r.examId === resultFilterExamId);
+  }, [results, resultFilterExamId]);
+
+  // 💡 통계: 드롭다운용 시험 목록 생성
+  const resultExamOptions = useMemo(() => {
+    const map = new Map();
+    results.forEach(r => map.set(r.examId, r.examTitle));
+    return Array.from(map.entries());
+  }, [results]);
+
+  // 💡 통계: 선택 삭제 로직
+  const handleDeleteResults = async () => {
+    if (selectedResultIds.length === 0) return;
+    if (!window.confirm(`선택한 ${selectedResultIds.length}개의 결과를 영구 삭제하시겠습니까?`)) return;
+    try {
+      const batch = writeBatch(db);
+      selectedResultIds.forEach(id => batch.delete(doc(db, 'results', id)));
+      await batch.commit();
+      setSelectedResultIds([]);
+      showToast('✅ 삭제 완료');
+    } catch(e) { showToast('❌ 삭제 실패'); }
+  };
+
+  // 💡 통계: 엑셀(CSV) 다운로드 로직
+  const handleExportCSV = () => {
+    if (filteredResults.length === 0) return showToast('출력할 데이터가 없습니다.');
+    const headers = ['응시일시', '시험/학습명', '유형', '사번', '이름', '점수(점)'];
+    const rows = filteredResults.map(r => [
+      new Date(r.createdAt).toLocaleString(),
+      `"${r.examTitle}"`, // 쉼표 포함 대비
+      r.mode === 'test' ? '실전 퀴즈' : '자율 학습',
+      r.studentId,
+      r.studentName,
+      r.score
+    ]);
+    
+    // \uFEFF 를 추가해야 엑셀에서 한글이 안 깨짐
+    const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n"); 
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `뷔르트_결과통계_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!isStyleLoaded) {
     return <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f8fafc' }}><p style={{ color: '#94a3b8', fontWeight: 'bold' }}>디자인 준비 중...</p></div>;
   }
@@ -223,26 +283,26 @@ export default function App() {
           </div>
         )}
 
-        {/* [2] 학생 대시보드 (isVisible=true 인 것만 노출) */}
+        {/* [2] 학생 대시보드 */}
         {view === 'home' && userProfile && (
           <div className="animate-in space-y-8 w-full">
             <h2 className="text-3xl font-black text-slate-800">환영합니다, {userProfile.name}님! 👋</h2>
             <div className="grid sm:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-4">
-                <h3 className="font-black text-xl text-emerald-600">📖 자율 학습</h3>
+                <h3 className="font-black text-xl text-emerald-600 flex items-center gap-2">📖 자율 학습</h3>
                 {exams.filter(e => e.mode === 'study' && e.isVisible).length === 0 && <p className="text-sm text-slate-400">등록된 학습이 없습니다.</p>}
                 {exams.filter(e => e.mode === 'study' && e.isVisible).map(ex => (
-                  <div key={ex.id} className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
+                  <div key={ex.id} className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center hover:border-emerald-300">
                     <span className="font-bold text-sm text-slate-700">{ex.title}</span>
                     <button onClick={() => { setCurrentExamId(ex.id); setView('student-entry'); }} className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black">학습시작</button>
                   </div>
                 ))}
               </div>
               <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-4">
-                <h3 className="font-black text-xl text-purple-600">🏆 실전 퀴즈</h3>
+                <h3 className="font-black text-xl text-purple-600 flex items-center gap-2">🏆 실전 퀴즈</h3>
                 {exams.filter(e => e.mode === 'test' && e.isVisible).length === 0 && <p className="text-sm text-slate-400">등록된 퀴즈가 없습니다.</p>}
                 {exams.filter(e => e.mode === 'test' && e.isVisible).map(ex => (
-                  <div key={ex.id} className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
+                  <div key={ex.id} className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center hover:border-purple-300">
                     <span className="font-bold text-sm text-slate-700">{ex.title}</span>
                     <button onClick={() => { setCurrentExamId(ex.id); setView('student-entry'); }} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-xs font-black">응시하기</button>
                   </div>
@@ -265,7 +325,7 @@ export default function App() {
               <button onClick={() => setAdminTab('analytics')} className={`px-5 py-2.5 rounded-xl ${adminTab === 'analytics' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>📊 결과 및 통계</button>
             </div>
 
-            {/* 세트 관리 탭 (토글 버튼 포함) */}
+            {/* 세트 관리 탭 */}
             {adminTab === 'exams' && (
               <div className="space-y-6">
                 <button onClick={() => { setEditingExamId(null); setNewExamTitle(''); setNewQuestions([{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]); setView('admin-create'); }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-slate-800">➕ 새 과정 만들기</button>
@@ -277,7 +337,7 @@ export default function App() {
                         <span className="font-bold text-slate-800">{ex.title}</span>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={() => updateDoc(doc(db, 'exams', ex.id), { isVisible: !ex.isVisible })} className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition-colors ${ex.isVisible ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                        <button onClick={() => toggleVisibility(ex.id, ex.isVisible)} className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition-colors ${ex.isVisible ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
                           {ex.isVisible ? '● 학생에게 노출 중' : '○ 숨김 (대기 중)'}
                         </button>
                         <button onClick={() => { setEditingExamId(ex.id); setNewExamTitle(ex.title); setNewExamMode(ex.mode); setNewQuestions(ex.questions); setView('admin-create'); }} className="bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-xl text-xs font-black text-slate-600">수정</button>
@@ -288,27 +348,66 @@ export default function App() {
               </div>
             )}
 
-            {/* 통계 탭 (관리자가 학생들 결과지 확인) */}
+            {/* 💡 통계 탭 */}
             {adminTab === 'analytics' && (
-              <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-4">
-                <h3 className="font-black text-xl mb-4">제출된 결과 리스트</h3>
-                {results.map(r => (
-                  <div key={r.id} className="p-4 bg-slate-50 border rounded-2xl flex justify-between items-center cursor-pointer hover:border-blue-400" onClick={() => setSelectedResultDetail(r)}>
-                    <div>
-                      <p className="font-bold text-slate-800">{r.examTitle}</p>
-                      <p className="text-xs text-slate-500">{r.studentName} ({r.studentId}) | {new Date(r.createdAt).toLocaleString()}</p>
-                    </div>
-                    <div className="text-xl font-black text-blue-600">{r.score}점</div>
+              <div className="bg-white p-6 sm:p-8 rounded-[2rem] border shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+                  <h3 className="font-black text-xl">📊 제출된 결과 리스트</h3>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button onClick={handleExportCSV} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1 shadow-sm">
+                      📥 엑셀 다운로드
+                    </button>
+                    <button disabled={selectedResultIds.length === 0} onClick={handleDeleteResults} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${selectedResultIds.length > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-400'}`}>
+                      선택 삭제 ({selectedResultIds.length})
+                    </button>
                   </div>
-                ))}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 bg-slate-50 p-4 rounded-2xl items-center">
+                  <span className="font-bold text-sm text-slate-600">과정별 필터:</span>
+                  <select value={resultFilterExamId} onChange={e => setResultFilterExamId(e.target.value)} className="p-2 rounded-xl border outline-none font-bold text-sm bg-white flex-1 w-full max-w-xs cursor-pointer">
+                    <option value="all">전체 과정 보기</option>
+                    {resultExamOptions.map(([id, title]) => <option key={id} value={id as string}>{title as string}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid gap-3">
+                  {filteredResults.length > 0 && (
+                    <label className="flex items-center gap-3 p-3 bg-slate-100 rounded-xl cursor-pointer w-fit pr-5">
+                      <input type="checkbox" className="w-4 h-4 accent-blue-600 cursor-pointer" checked={selectedResultIds.length === filteredResults.length} onChange={e => {
+                        if (e.target.checked) setSelectedResultIds(filteredResults.map(r => r.id));
+                        else setSelectedResultIds([]);
+                      }}/>
+                      <span className="text-xs font-bold text-slate-600">전체 선택</span>
+                    </label>
+                  )}
+                  {filteredResults.map(r => (
+                    <div key={r.id} className="flex gap-3 items-center">
+                      <input type="checkbox" className="w-5 h-5 accent-blue-600 cursor-pointer shrink-0" checked={selectedResultIds.includes(r.id)} onChange={e => {
+                        if (e.target.checked) setSelectedResultIds([...selectedResultIds, r.id]);
+                        else setSelectedResultIds(selectedResultIds.filter(id => id !== r.id));
+                      }} />
+                      <div className="flex-1 p-4 bg-white border rounded-2xl flex justify-between items-center cursor-pointer hover:border-blue-400 transition-colors" onClick={() => setSelectedResultDetail(r)}>
+                        <div>
+                          <p className="font-bold text-slate-800 flex items-center gap-2">
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-black ${r.mode === 'test' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>{r.mode === 'test' ? '퀴즈' : '학습'}</span>
+                            {r.examTitle}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">{r.studentName} ({r.studentId}) | {new Date(r.createdAt).toLocaleString()}</p>
+                        </div>
+                        <div className="text-xl font-black text-blue-600">{r.score}점</div>
+                      </div>
+                    </div>
+                  ))}
+                  {filteredResults.length === 0 && <p className="text-center py-10 text-slate-400 font-bold">결과 데이터가 없습니다.</p>}
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* 시험 응시 & 결과 뷰 생략 없는 풀 버전 */}
         {view === 'student-entry' && (
-          <div className="py-20 text-center animate-in">
+          <div className="py-20 text-center animate-in w-full flex flex-col items-center">
             <h2 className="text-4xl font-black mb-8">{exams.find(e => e.id === currentExamId)?.title}</h2>
             <button onClick={startExam} className="bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all">과정 시작하기 👉</button>
           </div>
@@ -334,7 +433,7 @@ export default function App() {
                         let next = [...questionQueue]; const item = next.shift();
                         if(!correct && item) next.push(item);
                         setQuestionQueue(next); setIsAnswerChecked(false); setCurrentSelectedOption(null);
-                        if(next.length === 0) submitExam(firstAttemptAnswers); // 단순 제출로 대체됨 (자율학습은 해설지 제공 불필요 시 생략 가능)
+                        if(next.length === 0) submitExam(firstAttemptAnswers);
                      }} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">다음 문제로</button>
                    </div>
                  )}
@@ -359,18 +458,17 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 [결과지 화면] 학생 제출 직후 또는 관리자 상세조회 모달 */}
+        {/* 💡 [결과지 화면] 학생 제출 직후 & 관리자 상세조회 모달 */}
         {(view === 'student-result' || selectedResultDetail) && (
-          <div className={`animate-in space-y-8 w-full max-w-2xl mx-auto pb-20 ${selectedResultDetail ? 'fixed inset-0 bg-white z-[100] p-6 sm:p-10 overflow-y-auto' : 'py-10'}`}>
+          <div className={`animate-in space-y-8 w-full max-w-2xl mx-auto pb-20 ${selectedResultDetail ? 'fixed inset-0 bg-slate-50 z-[100] p-6 sm:p-10 overflow-y-auto' : 'py-10'}`}>
             <div className="text-center mb-10">
               {view === 'student-result' && <h2 className="text-4xl font-black text-slate-800 mb-6">수고하셨습니다!</h2>}
               {selectedResultDetail && <h2 className="text-2xl font-black text-slate-800 mb-4">{selectedResultDetail.studentName}님의 결과지</h2>}
               <div className="text-7xl font-black text-blue-600 drop-shadow-md">{selectedResultDetail ? selectedResultDetail.score : studentScore}<span className="text-3xl text-slate-400 ml-2">점</span></div>
             </div>
 
-            {/* 해설지 (오답노트) 렌더링 영역 */}
             <div className="space-y-6">
-              <h3 className="font-black text-xl border-b-2 pb-2">📝 상세 결과 및 해설</h3>
+              <h3 className="font-black text-xl border-b-2 pb-2 border-slate-200">📝 상세 결과 및 해설</h3>
               {(selectedResultDetail || lastResult)?.activeQuestions.map((q, idx) => {
                 const ansObj = selectedResultDetail ? selectedResultDetail.answers : lastResult?.answers;
                 const studentAns = ansObj?.[idx];
@@ -381,8 +479,8 @@ export default function App() {
                     <div className="grid gap-2 mb-4">
                       {q.options.map((opt, oi) => {
                         let style = "bg-white border-slate-100 opacity-60";
-                        if (oi === q.answerIndex) style = "bg-emerald-100 border-emerald-500 font-black text-emerald-800 ring-2 ring-emerald-200";
-                        else if (oi === studentAns) style = "bg-red-100 border-red-500 font-bold text-red-800 line-through";
+                        if (oi === q.answerIndex) style = "bg-emerald-100 border-emerald-500 font-black text-emerald-800 ring-2 ring-emerald-200 opacity-100";
+                        else if (oi === studentAns) style = "bg-red-100 border-red-500 font-bold text-red-800 line-through opacity-100";
                         return (
                           <div key={oi} className={`p-4 rounded-xl border ${style} flex justify-between items-center`}>
                             <span>{opt}</span>
@@ -394,7 +492,7 @@ export default function App() {
                     </div>
                     {q.explanation && (
                       <div className="bg-white/80 p-5 rounded-2xl border text-sm font-medium text-slate-700 shadow-inner">
-                        <span className="font-black text-blue-600 mb-1 block">💡 관리자 해설</span>
+                        <span className="font-black text-blue-600 mb-1 block">💡 해설</span>
                         {q.explanation}
                       </div>
                     )}
@@ -406,7 +504,7 @@ export default function App() {
             {view === 'student-result' ? (
                <button onClick={() => { setView('home'); setLastResult(null); window.history.replaceState({}, '', window.location.pathname); }} className="w-full bg-slate-900 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl mt-10">목록으로 돌아가기</button>
             ) : (
-               <button onClick={() => setSelectedResultDetail(null)} className="w-full bg-slate-200 text-slate-600 py-5 rounded-[2rem] font-black text-xl mt-10">닫기</button>
+               <button onClick={() => setSelectedResultDetail(null)} className="w-full bg-slate-300 text-slate-700 py-5 rounded-[2rem] font-black text-xl mt-10 hover:bg-slate-400">닫기</button>
             )}
           </div>
         )}
@@ -453,7 +551,7 @@ export default function App() {
       </main>
 
       {toastMessage && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur text-white px-10 py-5 rounded-full text-sm font-black shadow-2xl z-[100] animate-in flex items-center gap-3">
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-10 py-5 rounded-full text-sm font-black shadow-2xl z-[100] animate-in flex items-center gap-3">
           <span className="text-emerald-400">●</span> {toastMessage}
         </div>
       )}
