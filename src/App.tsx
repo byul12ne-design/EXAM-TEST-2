@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
 import { 
-  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, 
   onAuthStateChanged, signOut, type User 
 } from 'firebase/auth';
 import { 
-  getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, 
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc, 
   doc, setDoc, getDoc, writeBatch 
 } from 'firebase/firestore';
+import { auth, db } from './lib/firebase';
 
 // ==========================================
 // 🛠️ 앱 설정 및 파이어베이스
@@ -16,20 +16,6 @@ const APP_CONFIG = {
   logoText: "뷔르트 교육 센터",
   logoImageUrl: "https://eshop.wuerth.de/is-bin/intershop.static/WFS/1401-B1-Site/-/en_US/webkit_bootstrap/dist/img/wuerth-logo.svg",
 };
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAIBp1x4DalwhtlFnYjnz2TisQBA0wVBSg",
-  authDomain: "product-exam-9b794.firebaseapp.com",
-  projectId: "product-exam-9b794",
-  storageBucket: "product-exam-9b794.firebasestorage.app",
-  messagingSenderId: "443959122996",
-  appId: "1:443959122996:web:355714f3a0c809b9ebbe61",
-  measurementId: "G-X5NVNL1G96"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 
 // --- 인터페이스 ---
 interface Question { category?: string; text: string; options: string[]; answerIndex: number; explanation: string; }
