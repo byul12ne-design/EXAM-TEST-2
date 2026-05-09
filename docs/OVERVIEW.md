@@ -12,7 +12,7 @@
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
 | 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
 | Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
-| Production blocking issue | Tailwind CDN 런타임 의존, Firebase Rules 미검증, 관리자/학생 인증값 bundle 노출, Firestore 전체 구독, 결과 저장 실패 처리 미흡 |
+| Production blocking issue | Tailwind CDN 런타임 의존, Firestore Rules production 미배포, 학생 공통 인증값/사번 검증 미해결, 결과 무결성/저장 실패 처리 미흡 |
 | 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
 | 현재 성능 문제 | 전체 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
@@ -22,7 +22,7 @@
 
 | 항목 | 분석 |
 |---|---|
-| production 위험 | `vercel.json` 없음, Tailwind CDN runtime 의존, Firebase Rules 미검증, 클라이언트 관리자/학생 인증값 노출 |
+| production 위험 | `vercel.json` 없음, Tailwind CDN runtime 의존, Firestore Rules production 미배포, 학생 공통 인증값/사번 검증 미해결 |
 | local build와 production 차이 | `npm.cmd run build` 성공은 `dist/` 생성만 보장한다. Vercel runtime의 CDN/Firebase/network/domain 문제는 보장하지 않는다 |
 | runtime risk | `src/App.tsx:87-99`에서 Tailwind CDN을 동적으로 삽입하고, 실패 시 `src/App.tsx:351` 로딩 화면에 머문다 |
 | env risk | `.env`, `.env.example` 없음. `import.meta.env` 미사용. Firebase client configuration와 인증값가 production bundle에 포함된다 |
