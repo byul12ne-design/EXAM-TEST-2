@@ -1,4 +1,4 @@
-﻿# Domain Terminology
+# 도메인 용어집
 
 ## 목적
 

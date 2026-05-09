@@ -1,16 +1,16 @@
-# Vercel Env Status
+# Vercel env 운영 상태
 
-## Purpose
+## 목적
 
-This document records how Firebase web client environment variables are operated for local development and Vercel deployment.
+이 문서는 로컬 개발과 Vercel 배포에서 Firebase web client 환경변수를 어떻게 운영하는지 정리한다.
 
-`src/lib/firebase.ts` reads Firebase web client configuration from `import.meta.env.VITE_FIREBASE_*`. Local development uses `.env.local`; Vercel deployments use Vercel Dashboard environment variables.
+`src/lib/firebase.ts`는 `import.meta.env.VITE_FIREBASE_*`에서 Firebase web client configuration을 읽는다. 로컬 개발은 `.env.local`을 사용하고, Vercel 배포는 Vercel Dashboard의 Environment Variables를 사용한다.
 
-Actual values must not be committed. `VITE_*` values are client-side values and are included in the browser bundle, so they are not a secret storage mechanism.
+실제 값은 Git에 commit하지 않는다. `VITE_*` 값은 browser bundle에 포함되는 client env이므로 secret 저장소가 아니다.
 
-## Current Registered Variables
+## 현재 등록된 변수명
 
-Only variable names are documented:
+문서에는 변수명만 기록한다.
 
 ```text
 VITE_FIREBASE_API_KEY
@@ -22,24 +22,24 @@ VITE_FIREBASE_APP_ID
 VITE_FIREBASE_MEASUREMENT_ID
 ```
 
-## Environment Policy
+## 환경별 운영 정책
 
 현재는 별도 staging Firebase project가 제공되지 않아 Preview와 Production Vercel 환경에 동일한 Firebase web client configuration이 등록되어 있다.
 
-| Environment | Purpose | Firebase Project | Current State |
+| 환경 | 목적 | Firebase project | 현재 상태 |
 |---|---|---|---|
-| Local | Developer build/dev verification | Value from `.env.local` | Configured locally and ignored by Git |
-| Preview | Vercel preview smoke test | Same Firebase project as Production | Env registered, but tests can affect production data |
-| Production | User-facing deployment | Same Firebase project as Preview | Env registered, production safety depends on Auth/Rules/runtime checks |
+| Local | 개발자 로컬 build/dev 검증 | `.env.local` 값 | 로컬 구성 완료, Git 추적 제외 |
+| Preview | Vercel preview 기본 동작 점검 | Production과 동일 Firebase project | env 등록 완료, 테스트가 production 데이터에 영향을 줄 수 있음 |
+| Production | 실제 사용자 배포 | Preview와 동일 Firebase project | env 등록 완료, 안전성은 Auth/Rules/runtime 점검에 의존 |
 
-Preview and Production env registration is complete, but data isolation is not complete. The recommended future state is:
+Preview와 Production env 등록은 완료되었지만, 데이터 격리는 완료되지 않았다. 권장 상태는 다음과 같다.
 
 ```text
-Preview  -> staging Firebase project
+Preview    -> staging Firebase project
 Production -> production Firebase project
 ```
 
-## Vercel Dashboard Location
+## Vercel Dashboard 등록 위치
 
 ```text
 Vercel Dashboard
@@ -48,45 +48,45 @@ Settings
 Environment Variables
 ```
 
-When changing env values:
+env 변경 시 절차:
 
-1. Test the value in `.env.local`.
-2. Run `npm.cmd run build`.
-3. Run local dev smoke test.
-4. Update Vercel Preview variables.
-5. Deploy Preview and smoke test carefully.
-6. Update Production variables.
-7. Redeploy Production.
-8. Smoke test Production URL.
+1. `.env.local`에서 먼저 값을 테스트한다.
+2. `npm.cmd run build`를 실행한다.
+3. 로컬 dev server 기본 동작을 확인한다.
+4. Vercel Preview 변수를 업데이트한다.
+5. Preview를 배포하고 주의해서 기본 동작을 점검한다.
+6. Production 변수를 업데이트한다.
+7. Production을 redeploy한다.
+8. Production URL에서 기본 동작을 점검한다.
 
-## Vite Env Rules
+## Vite env 주의사항
 
-| Rule | Explanation |
+| 원칙 | 설명 |
 |---|---|
-| `VITE_*` is public | It is included in the browser bundle |
-| Firebase web config is not an admin secret | It still requires Firestore Rules/Auth to be safe |
-| Do not store secrets in `VITE_*` | Admin passwords, shared student credentials, service account keys, and server tokens must not be placed there |
-| Missing env fails early | `src/lib/firebase.ts` throws a clear missing variable error |
+| `VITE_*`는 공개값이다 | browser bundle에 포함된다 |
+| Firebase web config는 admin secret이 아니다 | 그래도 Firestore Rules/Auth가 반드시 필요하다 |
+| `VITE_*`에 secret 저장 금지 | 관리자 비밀번호, 학생 공통 인증값, service account key, server token을 넣지 않는다 |
+| env 누락 시 빠르게 실패 | `src/lib/firebase.ts`가 누락 변수명을 명확히 throw한다 |
 
-## Current Verification
+## 현재 검증 상태
 
-| Check | Result |
+| 확인 항목 | 결과 |
 |---|---|
-| `.env.example` exists | Pass |
-| `.env.local` ignored | Pass |
-| Local production build | Pass |
-| Local dev server | Pass, HTTP 200 on root |
-| Vercel Dashboard env | Registered for Preview and Production according to current operator state |
-| Actual production URL behavior | Must be verified separately in Vercel and browser |
+| `.env.example` 존재 | 통과 |
+| `.env.local` Git 제외 | 통과 |
+| 로컬 production build | 통과 |
+| 로컬 dev server | 통과, root HTTP 200 |
+| Vercel Dashboard env | 운영자 기준 Preview/Production 등록 완료 |
+| 실제 production URL 동작 | Vercel Dashboard와 browser에서 별도 확인 필요 |
 
-This project may be deployed through Vercel automatic deployment, but repository code alone cannot confirm the actual Vercel Dashboard settings, environment variable values, deployment logs, or production domain behavior. This analysis is based on repository code and local production build; actual deployment status must be verified separately in Vercel Dashboard and the deployment URL.
+이 프로젝트는 Vercel 자동배포 환경일 수 있으나, 저장소 코드만으로는 Vercel Dashboard의 실제 설정, 환경 변수, 배포 로그, production domain 동작을 확정할 수 없다. 따라서 본 분석은 저장소 코드와 로컬 production build 기준이며, 실제 배포 상태는 Vercel Dashboard와 배포 URL에서 별도 확인해야 한다.
 
-## Remaining Operational Risks
+## 남은 운영 위험
 
-| Risk | Impact | Recommended Action |
+| 위험 | 영향 | 권장 조치 |
 |---|---|---|
-| Same Firebase project for Preview/Production | Preview tests may change production data | Create a staging Firebase project |
-| Firestore Rules not deployed to production | Repository rules do not protect production yet | Deploy only after staging/preview verification |
-| Student shared credential | Student account impersonation risk | Replace with verified per-user auth flow |
-| Employee ID validation absent | Fake or stolen employee IDs can register | Add server-side or admin-controlled validation |
-| Tailwind CDN runtime dependency | App can stall if CDN fails | Move Tailwind to build-time dependency |
+| Preview/Production 동일 Firebase project 사용 | Preview 테스트가 production 데이터에 영향을 줄 수 있음 | staging Firebase project 생성 |
+| Firestore Rules production 미배포 | repository Rules가 아직 production을 보호하지 않음 | staging/Preview 검증 후 배포 |
+| 학생 공통 인증값 | 학생 계정 도용 위험 | 검증된 개인별 인증 흐름으로 전환 |
+| 사번 실제 직원 검증 부재 | 허위/도용 사번 가입 가능 | 서버 측 또는 관리자 통제 검증 추가 |
+| Tailwind CDN runtime 의존 | CDN 실패 시 화면 초기화 위험 | build-time Tailwind로 전환 |

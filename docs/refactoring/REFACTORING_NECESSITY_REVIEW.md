@@ -1,4 +1,4 @@
-﻿# Refactoring Necessity Review
+# 리팩토링 필요성 검토
 
 ## 결론
 

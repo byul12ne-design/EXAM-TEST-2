@@ -1,140 +1,140 @@
-# Security Remediation Plan
+# 보안 개선 계획
 
-## Current State Summary
+## 현재 상태 요약
 
-This document reflects the current repository state. It does not contain real passwords, service account keys, Firebase values, administrator identifiers, UIDs, or employee data.
+이 문서는 현재 repository 상태를 기준으로 작성한다. 실제 비밀번호, service account key, Firebase 실값, 관리자 식별자, uid, 직원 데이터는 포함하지 않는다.
 
-| Area | Current State |
+| 영역 | 현재 상태 |
 |---|---|
-| Firebase client config | Moved to `src/lib/firebase.ts` and loaded from `VITE_FIREBASE_*` |
-| Local env | `.env.local` configured locally and ignored by Git |
-| Vercel env | Preview/Production env registered with the same Firebase web client config |
-| Login-before Firestore subscriptions | Removed for sensitive collections |
-| Admin password comparison | Removed |
-| Admin login | Separate admin ID/password Firebase Auth flow |
-| Admin authorization | Firebase ID token `admin: true` custom claim |
-| Admin account/claim | One operator-created account has been granted `admin: true` and login was confirmed |
-| Firestore Rules | Draft added and Emulator 20-scenario test passed |
-| Production Rules deploy | Not performed |
-| Student shared credential | Still unresolved |
-| Employee ID validation | Not implemented; external policy/dependency required |
+| Firebase client config | `src/lib/firebase.ts`로 분리, `VITE_FIREBASE_*`에서 로드 |
+| 로컬 env | `.env.local` 구성 완료, Git 추적 제외 |
+| Vercel env | Preview/Production env 등록 완료, 현재 동일 Firebase web client config 사용 |
+| 로그인 전 Firestore 구독 | 민감 collection 기준 제거 완료 |
+| 관리자 비밀번호 비교 | 제거 완료 |
+| 관리자 로그인 | 별도 관리자 ID/password Firebase Auth 흐름 |
+| 관리자 권한 | Firebase ID token의 `admin: true` Custom Claim |
+| 관리자 계정/claim | 운영자 생성 및 claim 부여 완료, 로그인 확인 완료 |
+| Firestore Rules | 초안 추가, Emulator 20개 시나리오 통과 |
+| production Rules 배포 | 미적용 |
+| 학생 공통 인증값 | 미해결 |
+| 사번 실제 직원 검증 | 구현 없음, 외부 정책/원천 데이터 필요 |
 
-## Current Security Posture
+## 현재 보안 상태
 
-| Severity | Risk | Current Cause | Current Status | Required Action |
+| 심각도 | 위험 | 현재 원인 | 현재 상태 | 필요한 조치 |
 |---|---|---|---|---|
-| Critical | Student impersonation | Student flow still uses a shared credential model | Unresolved | Replace with verified per-user auth |
-| Critical | Fake employee ID registration | No authoritative employee directory check | Unresolved | Add server-side/admin-controlled validation |
-| Critical | Firestore Rules not active in production | Rules draft exists but is not deployed | Unresolved | Deploy after preview/staging smoke test |
-| High | Preview can affect production data | Preview and Production use same Firebase project | Unresolved | Create staging Firebase project |
-| High | Client-calculated score/result payload | Browser submits computed result data | Unresolved | Validate/score on server |
-| Medium | Large bundle | Single entry bundle with Firebase/admin/student UI | Unresolved | Split code and vendor chunks |
-| Medium | Tailwind CDN runtime dependency | Styling depends on external runtime script | Unresolved | Move Tailwind to build-time CSS |
+| 치명 | 학생 도용 | 학생 흐름에 공통 인증 구조가 남아 있음 | 미해결 | 개인별 또는 검증된 인증으로 전환 |
+| 치명 | 허위 사번 등록 | 실제 직원 명부 검증 없음 | 미해결 | 서버 측 또는 관리자 통제 검증 추가 |
+| 치명 | Firestore Rules production 미적용 | Rules 초안은 repository/emulator에만 있음 | 미해결 | Preview/운영 전 점검 후 배포 |
+| 높음 | Preview 테스트가 production 데이터에 영향 | Preview와 Production이 같은 Firebase project 사용 | 미해결 | staging Firebase project 생성 |
+| 높음 | 결과 위변조 가능성 | browser가 점수/결과 payload를 생성 | 미해결 | 서버 측 검증/채점 도입 |
+| 보통 | 큰 bundle | 단일 entry에 Firebase/관리자/학생 UI 포함 | 미해결 | code splitting/manualChunks 적용 |
+| 보통 | Tailwind CDN runtime 의존 | 외부 runtime script에 의존 | 미해결 | build-time Tailwind 전환 |
 
-## Completed Security Work
+## 완료된 보안 작업
 
-| Completed Work | Files |
+| 완료 항목 | 파일 |
 |---|---|
-| Firebase config env split | `src/lib/firebase.ts`, `.env.example`, `.gitignore`, `src/App.tsx` |
-| Clear env missing error | `src/lib/firebase.ts` |
-| Pre-login sensitive subscriptions removed | `src/App.tsx` |
-| Admin login separated from student flow | `src/App.tsx` |
-| Admin hardcoded password comparison removed | `src/App.tsx` |
-| Admin claim check added | `src/App.tsx` |
-| Claimless admin login blocked/sign-out | `src/App.tsx` |
-| Firestore Rules draft added | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
-| Rules Emulator test added and run | `scripts/firestore-rules-emulator-test.mjs` |
-| Admin claim operation script added | `scripts/set-admin-claim.mjs` |
-| Admin claim operating docs added | `docs/operations/ADMIN_CLAIM_SETUP.md` |
+| Firebase config env 분리 | `src/lib/firebase.ts`, `.env.example`, `.gitignore`, `src/App.tsx` |
+| env 누락 시 명확한 오류 | `src/lib/firebase.ts` |
+| 로그인 전 민감 데이터 구독 제거 | `src/App.tsx` |
+| 관리자 로그인과 학생 흐름 분리 | `src/App.tsx` |
+| 관리자 하드코딩 비밀번호 비교 제거 | `src/App.tsx` |
+| 관리자 Custom Claim 확인 추가 | `src/App.tsx` |
+| claim 없는 관리자 로그인 차단 | `src/App.tsx` |
+| Firestore Rules 초안 추가 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
+| Rules Emulator 테스트 추가 및 실행 | `scripts/firestore-rules-emulator-test.mjs` |
+| admin claim 운영 스크립트 추가 | `scripts/set-admin-claim.mjs` |
+| admin claim 운영 문서 추가 | `docs/operations/ADMIN_CLAIM_SETUP.md` |
 
-## Current Admin Security Model
+## 현재 관리자 보안 모델
 
-| Layer | Policy |
+| 계층 | 정책 |
 |---|---|
-| Admin login ID | Separate namespace from student employee ID |
-| Internal Auth email | `${adminId}@wuerth-admin.exam` |
-| Authentication | Firebase Auth email/password |
-| Authorization | `admin: true` custom claim |
-| App guard | `getIdTokenResult(user, true)` and `claims.admin === true` |
+| 관리자 login ID | 학생 사번 namespace와 분리 |
+| 내부 Auth email | `${adminId}@wuerth-admin.exam` |
+| 인증 | Firebase Auth email/password |
+| 권한 | `admin: true` Custom Claim |
+| 앱 guard | `getIdTokenResult(user, true)`와 `claims.admin === true` |
 | Firestore Rules | `request.auth.token.admin == true` |
-| Secret handling | No admin password or secret in code or `VITE_*` env |
+| secret 취급 | 관리자 비밀번호/secret을 코드나 `VITE_*` env에 저장하지 않음 |
 
-The custom claim must be assigned through Firebase Admin SDK or another secure operator process. The web client must never assign its own admin claim.
+Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여한다. 웹 client가 자기 자신에게 관리자 claim을 부여하는 구조는 허용하지 않는다.
 
-## Remaining Plan
+## 남은 개선 계획
 
-### Phase 1 - Production Guardrail
+### Phase 1 - production 보호 장치 적용 준비
 
-Goal: safely activate the rules-based protection.
+목표: Rules 기반 보호를 안전하게 활성화한다.
 
-| Work | Target | Notes |
+| 작업 | 대상 | 메모 |
 |---|---|---|
-| Review Emulator test output | `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md` | Current result is pass |
-| Run Vercel Preview smoke test | Vercel Preview URL | Same Firebase project risk must be accepted |
-| Deploy Firestore Rules | Firebase Console/CLI | Do not deploy before smoke test |
-| Run production smoke test | Production URL | Verify student/admin flows immediately |
+| Emulator 테스트 결과 확인 | `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md` | 현재 통과 |
+| Vercel Preview 기본 동작 점검 | Vercel Preview URL | 동일 Firebase project 위험 수용 필요 |
+| Firestore Rules 배포 | Firebase Console/CLI | 점검 없이 배포 금지 |
+| production 기본 동작 점검 | Production URL | 배포 직후 학생/관리자 흐름 확인 |
 
-### Phase 2 - Student Auth Remediation
+### Phase 2 - 학생 인증 개선
 
-Goal: remove student shared credential and fake employee ID registration risk.
+목표: 학생 공통 인증값과 허위 사번 등록 위험을 제거한다.
 
-| Work | Required Owner Input |
+| 작업 | 필요한 owner 입력 |
 |---|---|
-| Choose validation model | Owner/admin/IT decision |
-| Provide employee allowlist or validation endpoint | HR/system owner/backend |
-| Decide student account lifecycle | Operator |
-| Replace shared credential | Developer after policy is decided |
+| 사번 검증 방식 선택 | owner/admin/IT 결정 |
+| 직원 allowlist 또는 검증 endpoint 제공 | HR/system owner/backend |
+| 학생 계정 lifecycle 결정 | 운영자 |
+| 학생 공통 인증값 제거 | 정책 확정 후 개발 진행 |
 
-Recommended first option: admin pre-registration or server-side validation while keeping employee ID UX.
+권장 1차 방식은 사번 UX를 유지하면서 관리자 사전 등록 또는 서버 측 검증을 추가하는 것이다.
 
-### Phase 3 - Result Integrity
+### Phase 3 - 결과 무결성 개선
 
-Goal: stop trusting client-computed result payloads.
+목표: client가 계산한 결과 payload를 그대로 신뢰하지 않는다.
 
-| Work | Direction |
+| 작업 | 방향 |
 |---|---|
-| Separate result builder/calculator | Refactor into testable functions |
-| Add server-side validation/scoring | Vercel Function or Firebase Function |
-| Prevent duplicate/invalid submissions | Server transaction/idempotency |
+| 결과 생성/채점 로직 분리 | 테스트 가능한 함수로 이동 |
+| 서버 측 검증/채점 추가 | Vercel Function 또는 Firebase Function |
+| 중복/비정상 제출 방지 | transaction 또는 idempotency 설계 |
 
-### Phase 4 - Maintainability And Runtime Hardening
+### Phase 4 - 유지보수성과 runtime 안정성 개선
 
-| Work | Direction |
+| 작업 | 방향 |
 |---|---|
-| Move Auth logic out of `App.tsx` | `src/services/authService.ts`, `src/hooks/useAuth.ts` |
-| Move Firestore access out of `App.tsx` | service modules per domain |
-| Add better error/loading UX | Permission/network/save failure states |
-| Remove Tailwind CDN | Build-time Tailwind setup |
-| Reduce bundle size | code splitting/manual chunks |
+| Auth 로직 분리 | `src/services/authService.ts`, `src/hooks/useAuth.ts` |
+| Firestore 접근 분리 | domain별 service module |
+| error/loading UX 개선 | 권한, 네트워크, 저장 실패 안내 |
+| Tailwind CDN 제거 | build-time Tailwind 구성 |
+| bundle size 개선 | code splitting/manualChunks |
 
-## GitHub Safety Policy
+## GitHub 공개 기준
 
-Allowed:
+올려도 되는 것:
 
-| Allowed Item | Condition |
+| 항목 | 조건 |
 |---|---|
-| `.env.example` | Placeholder values only |
-| Public docs | No real credentials or exploit instructions |
-| Firebase client variable names | Names only |
-| Firestore Rules draft | No real UID/email/project values |
-| Admin claim script | No embedded secrets |
+| `.env.example` | placeholder만 포함 |
+| public docs | 실제 인증값과 우회 절차 없음 |
+| Firebase client 변수명 | 변수명만 포함 |
+| Firestore Rules 초안 | 실제 uid/email/project 값 없음 |
+| admin claim script | secret 내장 없음 |
 
-Forbidden:
+올리면 안 되는 것:
 
-| Forbidden Item | Reason |
+| 항목 | 이유 |
 |---|---|
-| Actual admin password | Admin compromise |
-| Actual student shared credential | Student account compromise |
-| Service account JSON | Firebase Admin compromise |
-| Private key/client email values | Server credential exposure |
-| `.env.local`/`.env.production` | Real environment values |
-| Real admin UID/email | Account targeting risk |
+| 실제 관리자 비밀번호 | 관리자 권한 노출 |
+| 실제 학생 공통 인증값 | 학생 계정 도용 위험 |
+| service account JSON | Firebase Admin 권한 노출 |
+| private key/client email 값 | 서버 권한 노출 |
+| `.env.local`/`.env.production` | 실제 환경값 포함 가능 |
+| 실제 관리자 uid/email | 운영 계정 표적화 위험 |
 
-## Next Recommended Code Work
+## 다음 권장 코드 작업
 
-1. Do not change collections or migrate data yet.
-2. Keep admin claim flow as current baseline.
-3. Deploy Firestore Rules only after preview/rollback plan.
-4. Ask owner for employee validation source/policy.
-5. Replace the student shared credential after the validation policy is decided.
-6. Move auth/firestore logic into services before larger UX changes.
+1. collection rename이나 DB migration은 아직 하지 않는다.
+2. 현재 관리자 claim 흐름을 기준 상태로 유지한다.
+3. Preview 점검과 롤백 계획 후 Firestore Rules를 배포한다.
+4. owner에게 사번 검증 원천/정책을 요청한다.
+5. 정책 확정 후 학생 공통 인증값을 제거한다.
+6. 더 큰 UX 변경 전에 auth/firestore 로직을 service로 분리한다.

@@ -1,24 +1,24 @@
-# Firestore Rules Emulator Test
+# Firestore Rules Emulator 테스트
 
-## Purpose
+## 목적
 
-This document records the current local Firestore Emulator verification for the repository `firestore.rules` draft.
+이 문서는 repository의 `firestore.rules` 초안을 로컬 Firestore Emulator로 검증한 결과를 기록한다.
 
-The tests were run against the local Emulator only. Production Firebase Rules were not deployed and production data was not accessed.
+테스트는 로컬 Emulator에서만 수행했다. production Firebase Rules 배포는 하지 않았고, production 데이터에도 접근하지 않았다.
 
-## Current Test Setup
+## 현재 테스트 구성
 
-| Item | Current State |
+| 항목 | 현재 상태 |
 |---|---|
-| `firestore.rules` | Present |
-| `firebase.json` | Present |
-| `firestore.indexes.json` | Present |
-| Test script | `scripts/firestore-rules-emulator-test.mjs` |
-| Firebase CLI | Executed through `npx firebase-tools` |
-| Java | Temurin JDK 21 used for Emulator |
+| `firestore.rules` | 존재 |
+| `firebase.json` | 존재 |
+| `firestore.indexes.json` | 존재 |
+| 테스트 스크립트 | `scripts/firestore-rules-emulator-test.mjs` |
+| Firebase CLI | `npx firebase-tools`로 실행 |
+| Java | Temurin JDK 21 사용 |
 | Rules unit test package | `@firebase/rules-unit-testing@3.0.4` |
 
-## Command Used
+## 실행 명령
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot'
@@ -26,75 +26,92 @@ $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
 npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only firestore "node scripts/firestore-rules-emulator-test.mjs"
 ```
 
-## Latest Result
+## 최신 결과
 
-| Metric | Result |
+| 항목 | 결과 |
 |---|---|
-| Firestore Emulator started | Pass |
-| Rules scenarios executed | Pass |
-| Total scenarios | 20 |
-| Passed | 20 |
-| Failed | 0 |
-| Production deploy | Not performed |
-| Production data access | Not performed |
+| Firestore Emulator 시작 | 통과 |
+| Rules 시나리오 실행 | 통과 |
+| 총 시나리오 | 20 |
+| 통과 | 20 |
+| 실패 | 0 |
+| production 배포 | 수행하지 않음 |
+| production data 접근 | 수행하지 않음 |
 
-Expected `PERMISSION_DENIED` messages were printed for denied scenarios. Those messages are part of successful negative testing.
+차단되어야 하는 시나리오에서 출력된 `PERMISSION_DENIED` 메시지는 정상적인 negative test 결과다.
 
-## Scenario Coverage
+## production 배포 전 재점검
 
-| Actor | Scenario | Expected Result | Result |
+최근 배포 전 재점검에서도 동일한 결과가 나왔다.
+
+| 확인 항목 | 결과 |
+|---|---|
+| Rules 점검 전 로컬 build | 통과 |
+| Firestore Emulator 명령 | 통과 |
+| 총 시나리오 | 20 |
+| 통과 | 20 |
+| 실패 | 0 |
+| production Rules 배포 | 수행하지 않음 |
+
+Emulator 결과는 repository Rules 초안이 준비된 비로그인/학생/claim 없는 사용자/admin claim 사용자 시나리오와 일치함을 확인한다. 다만 실제 Vercel Preview 앱에서의 운영 전 기본 동작 점검을 대체하지는 않는다.
+
+## 시나리오 범위
+
+| 사용자 | 시나리오 | 기대 결과 | 결과 |
 |---|---|---|---|
-| Signed out | Public course query | Denied | Pass |
-| Signed out | `results` read | Denied | Pass |
-| Signed out | `questionBank` read | Denied | Pass |
-| Student A | Visible course query | Allowed | Pass |
-| Student A | Hidden course direct read | Denied | Pass |
-| Student A | Own result query | Allowed | Pass |
-| Student A | Other student's result read | Denied | Pass |
-| Student A | Course write | Denied | Pass |
-| Student A | `questionBank` read | Denied | Pass |
-| Student A | Own result create | Allowed | Pass |
-| Student A | Other employee result create | Denied | Pass |
-| Student A | Own progress write | Allowed | Pass |
-| Student B | Student A progress read | Denied | Pass |
-| Claimless user | Admin `exams` read | Denied | Pass |
-| Claimless user | `questionBank` read | Denied | Pass |
-| Claimless user | Full `results` read | Denied | Pass |
-| Admin claim user | Full `exams` read | Allowed | Pass |
-| Admin claim user | `questionBank` read | Allowed | Pass |
-| Admin claim user | Result delete | Allowed | Pass |
-| Admin claim user | Course update | Allowed | Pass |
+| 비로그인 | 공개 과정 query | 차단 | 통과 |
+| 비로그인 | `results` read | 차단 | 통과 |
+| 비로그인 | `questionBank` read | 차단 | 통과 |
+| 학생 A | 공개 과정 query | 허용 | 통과 |
+| 학생 A | 비공개 과정 직접 read | 차단 | 통과 |
+| 학생 A | 본인 결과 query | 허용 | 통과 |
+| 학생 A | 다른 학생 결과 직접 read | 차단 | 통과 |
+| 학생 A | 과정 write | 차단 | 통과 |
+| 학생 A | `questionBank` read | 차단 | 통과 |
+| 학생 A | 본인 결과 create | 허용 | 통과 |
+| 학생 A | 다른 사번 결과 create | 차단 | 통과 |
+| 학생 A | 본인 progress write | 허용 | 통과 |
+| 학생 B | 학생 A progress read | 차단 | 통과 |
+| claim 없는 사용자 | 관리자용 `exams` 전체 read | 차단 | 통과 |
+| claim 없는 사용자 | `questionBank` read | 차단 | 통과 |
+| claim 없는 사용자 | 전체 `results` read | 차단 | 통과 |
+| admin claim 사용자 | 전체 `exams` read | 허용 | 통과 |
+| admin claim 사용자 | `questionBank` read | 허용 | 통과 |
+| admin claim 사용자 | result delete | 허용 | 통과 |
+| admin claim 사용자 | course update | 허용 | 통과 |
 
-## Current App Alignment
+## 현재 앱과의 정합성
 
-| Area | Current State |
+| 영역 | 현재 상태 |
 |---|---|
-| Admin login | Firebase Auth admin ID/password flow |
-| Admin authorization | `getIdTokenResult(user, true)` and `claims.admin === true` |
-| Admin subscription | Runs only when `isAdmin && admin view` |
-| Student subscription | Visible courses and own results |
-| Signed-out subscription | Sensitive collection subscriptions removed |
+| 관리자 로그인 | Firebase Auth 관리자 ID/password 흐름 |
+| 관리자 권한 확인 | `getIdTokenResult(user, true)`와 `claims.admin === true` |
+| 관리자 구독 | `isAdmin && admin view`일 때만 실행 |
+| 학생 구독 | 공개 과정과 본인 결과 |
+| 비로그인 구독 | 민감 collection 구독 제거 |
 
-## Remaining Conflicts And Limits
+## 남은 충돌 가능성과 한계
 
-| Issue | Current Risk |
+| 이슈 | 현재 위험 |
 |---|---|
-| Rules not deployed | Production still uses currently deployed Firebase Rules, not necessarily this file |
-| Student shared credential | Rules cannot prove the person using an employee ID is the real employee |
-| Employee ID validation absent | Fake 8-digit employee IDs can still be registered by client flow |
-| Client result payload | Rules cannot fully validate true score/answer integrity |
-| Same Firebase for Preview/Production | Preview smoke tests can affect production data |
+| Rules production 미배포 | production은 아직 현재 Firebase에 배포된 Rules를 사용함 |
+| 학생 공통 인증값 | Rules만으로 사번 사용자가 실제 직원인지 증명할 수 없음 |
+| 사번 실제 직원 검증 부재 | 형식이 맞는 허위 사번 등록을 막지 못함 |
+| 결과 payload client 계산 | Rules만으로 점수/정답 무결성을 완전히 보장할 수 없음 |
+| Preview/Production 동일 Firebase 사용 | Preview 점검이 production 데이터에 영향을 줄 수 있음 |
 
-## Production Deployment Gate
+## production 배포 gate
 
-Do not deploy the rules until:
+다음 조건이 끝나기 전에는 Rules를 배포하지 않는다.
 
-1. Admin claim account is verified.
-2. Student smoke test passes.
-3. Admin smoke test passes.
-4. Preview data-risk is accepted or a staging Firebase project exists.
-5. Rollback plan is ready.
+1. 관리자 claim 계정 확인.
+2. 학생 기본 동작 점검 통과.
+3. 관리자 기본 동작 점검 통과.
+4. Preview 데이터 위험 수용 또는 staging Firebase project 준비.
+5. 롤백 계획 준비.
 
-## Conclusion
+현재 gate 상태: 현재 Firebase Console Rules 백업과 실제 앱 학생/관리자 기본 동작 점검이 완료될 때까지 배포 차단.
 
-The current draft Firestore Rules pass local Emulator verification for the prepared 20 scenarios. They are aligned with the implemented admin custom claim flow, but they are not active in production until deployed.
+## 결론
+
+현재 Firestore Rules 초안은 로컬 Emulator 20개 시나리오를 통과했다. 관리자 Custom Claim 흐름과 정합성이 있지만, 실제 production에 적용되려면 별도 배포와 배포 직후 점검이 필요하다.

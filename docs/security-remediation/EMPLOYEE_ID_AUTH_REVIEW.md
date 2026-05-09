@@ -1,100 +1,100 @@
-# Employee ID Auth Review
+# 사번 기반 인증 검토
 
-## Current Status
+## 현재 상태
 
-The student login and registration UX still uses employee ID based entry. This flow is intentionally unchanged in the current admin-security work.
+학생 로그인과 회원가입 UX는 여전히 사번 기반이다. 현재 관리자 보안 개선 단계에서는 이 흐름을 의도적으로 변경하지 않았다.
 
-| Item | Current State |
+| 항목 | 현재 상태 |
 |---|---|
-| Student login UX | Preserved |
-| Employee ID format validation | Basic client validation only |
-| Real employee registry check | Not implemented |
-| Name and employee ID matching | Not implemented |
-| Student shared credential | Still present as unresolved security issue |
-| Admin login | Now separated from student employee ID flow |
-| Firestore Rules | Draft limits data access after auth, but cannot validate real employee identity |
+| 학생 로그인 UX | 유지 |
+| 사번 형식 검증 | 기본 client 검증만 존재 |
+| 실제 직원 명부 대조 | 구현 없음 |
+| 이름과 사번 매칭 | 구현 없음 |
+| 학생 공통 인증값 | 미해결 보안 이슈 |
+| 관리자 로그인 | 학생 사번 흐름과 분리 완료 |
+| Firestore Rules | 인증 후 데이터 접근 범위는 줄이나 실제 직원 여부는 검증하지 못함 |
 
-No real employee IDs, passwords, or internal personnel data are recorded in this document.
+실제 사번, 비밀번호, 내부 직원 데이터는 문서에 기록하지 않는다.
 
-## Current Flow
+## 현재 흐름
 
-| Step | Current Behavior |
+| 순서 | 현재 동작 |
 |---|---|
-| 1 | Student enters employee ID and name |
-| 2 | App validates basic employee ID shape |
-| 3 | App creates a pseudo Firebase Auth email for the student flow |
-| 4 | App signs in or creates an account with the existing student credential mechanism |
-| 5 | App creates/loads a user profile document |
-| 6 | Student-specific data queries start after auth/profile is available |
+| 1 | 학생이 사번과 이름을 입력 |
+| 2 | 앱이 사번의 기본 형식을 확인 |
+| 3 | 앱이 학생용 pseudo Firebase Auth email을 생성 |
+| 4 | 기존 학생 인증 방식으로 로그인 또는 계정 생성 |
+| 5 | 사용자 profile 문서를 생성하거나 로드 |
+| 6 | 인증/profile 준비 후 학생 데이터 query 시작 |
 
-## Answers To Key Questions
+## 핵심 질문 답변
 
-| Question | Current Answer |
+| 질문 | 현재 답 |
 |---|---|
-| Is employee ID checked against a real staff list? | No |
-| Is name matched to employee ID? | No |
-| Can a fake correctly shaped employee ID be attempted? | Yes |
-| Can another person's employee ID be attempted? | Yes |
-| Does Firestore Rules solve identity proof? | No |
-| Does admin claim solve student validation? | No, it only protects admin access |
-| Is student shared credential still a risk? | Yes |
+| 사번을 실제 직원 명부와 대조하는가? | 아니다 |
+| 이름과 사번이 매칭되는지 확인하는가? | 아니다 |
+| 형식이 맞는 허위 사번 시도가 가능한가? | 가능하다 |
+| 다른 사람 사번으로 시도할 수 있는가? | 가능하다 |
+| Firestore Rules가 실제 신원 증명을 해결하는가? | 아니다 |
+| admin claim이 학생 검증을 해결하는가? | 아니다. 관리자 접근만 보호한다 |
+| 학생 공통 인증값은 여전히 위험한가? | 그렇다 |
 
-## Scenario Analysis
+## 시나리오별 동작
 
-| Scenario | Current Code Flow | Result | Risk |
+| 시나리오 | 현재 코드 흐름 | 결과 | 위험 |
 |---|---|---|---|
-| Real employee ID | Basic validation passes, auth/profile flow proceeds | Login/register can proceed | Medium |
-| Fake correctly shaped employee ID | Basic validation can pass | Account attempt can proceed | Critical |
-| Existing employee ID | Existing Firebase Auth/profile behavior applies | Depends on account state | High |
-| Another person's employee ID | No identity proof exists | Possible impersonation attempt | Critical |
-| Different name with same employee ID | Name is not matched to registry | Possible inconsistent profile | High |
-| Admin ID guessed through student flow | Admin login namespace is now separated | Admin claim still required | Medium |
-| Signed-out access | Sensitive Firestore subscriptions removed | Data exposure reduced | Medium |
-| Firebase Auth user without profile | App attempts profile handling based on current logic | Edge-case UX still needs hardening | Medium |
+| 실제 직원 사번 | 기본 검증 통과 후 인증/profile 흐름 진행 | 로그인/등록 가능 | 보통 |
+| 형식이 맞는 허위 사번 | 기본 검증 통과 가능 | 계정 시도 가능 | 치명 |
+| 이미 등록된 사번 | 기존 Firebase Auth/profile 상태에 따라 동작 | 계정 상태에 의존 | 높음 |
+| 다른 사람 사번 | 신원 증명 없음 | 도용 시도 가능 | 치명 |
+| 같은 사번에 다른 이름 | 명부 매칭 없음 | profile 불일치 가능 | 높음 |
+| 학생 흐름에서 관리자 ID 추측 | 관리자 namespace가 분리됨 | admin claim 없으면 관리자 접근 불가 | 보통 |
+| 비로그인 접근 | 민감 Firestore 구독 제거 | 노출 완화 | 보통 |
+| Auth user는 있으나 profile 없음 | 현재 profile 처리 로직에 의존 | UX 보강 필요 | 보통 |
 
-## Security Risk Summary
+## 보안 위험 요약
 
-| Severity | Risk | Impact | Recommended Action |
+| 심각도 | 위험 | 영향 | 권장 조치 |
 |---|---|---|---|
-| Critical | Fake employee ID registration | Unauthorized user can enter student flow | Add server-side/admin-controlled validation |
-| Critical | Employee ID impersonation | One user can attempt another identity | Replace shared credential and verify identity |
-| Critical | Student shared credential | Compromise affects all students | Move to per-user auth or controlled registration |
-| High | No name/ID match | Data quality and accountability risk | Validate against authoritative roster |
-| Medium | Profile field role confusion | Client profile data must not be authority | Use Auth claims/Rules for authority |
+| 치명 | 허위 사번 등록 | 권한 없는 사용자가 학생 흐름에 진입 가능 | 서버 측 또는 관리자 통제 검증 도입 |
+| 치명 | 사번 도용 | 다른 사람 신원으로 응시 가능 | 공통 인증값 제거 및 신원 검증 |
+| 치명 | 학생 공통 인증값 | 하나의 값이 노출되면 전체 학생 인증 위험 | 개인별 인증 또는 통제된 등록으로 전환 |
+| 높음 | 이름/사번 매칭 부재 | 데이터 품질과 책임 추적 위험 | 권위 있는 명부 기준 검증 |
+| 보통 | profile `role` 혼동 | client profile 필드를 권한 근거로 오해할 수 있음 | Auth claim/Rules를 권한 근거로 사용 |
 
-## Why Employee Validation Is External
+## 사번 검증이 외부 의존인 이유
 
-The app does not contain an authoritative employee directory. A real fix requires one of the following external inputs:
+앱에는 신뢰할 수 있는 직원 명부가 없다. 실제 개선에는 다음 중 하나가 필요하다.
 
-| Required Input | Owner |
+| 필요한 입력 | 담당 |
 |---|---|
-| Approved employee roster | Business/HR/system owner |
-| Registration allowlist | Administrator/operator |
-| One-time registration code policy | Business owner/operator |
-| Company email/SSO policy | IT/identity team |
-| Server-side verification endpoint | Backend/platform owner |
+| 승인된 직원 명부 | business/HR/system owner |
+| 등록 allowlist | 관리자/운영자 |
+| 일회용 등록코드 정책 | business owner/운영자 |
+| 회사 email/SSO 정책 | IT/identity team |
+| 서버 측 검증 endpoint | backend/platform owner |
 
-Hardcoding a staff list in the client bundle is not acceptable because it exposes internal personnel data and can be inspected by users.
+직원 명부를 client bundle에 하드코딩하는 것은 내부 인사 정보가 노출되므로 적절하지 않다.
 
-## Recommended First Improvement
+## 현실적인 1차 개선안
 
-For an internal training web app that wants to keep employee-ID-based UX:
+사내용 교육 웹에서 사번 기반 UX를 유지하려면 다음 순서를 권장한다.
 
-1. Keep the employee ID input UX.
-2. Stop using a shared student credential.
-3. Add server-side or admin-controlled registration validation.
-4. Allow only verified employee IDs to create or sign into student accounts.
-5. Keep admin authorization separate through Firebase Auth admin custom claims.
+1. 사번 입력 UX는 유지한다.
+2. 학생 공통 인증값을 제거한다.
+3. 서버 측 또는 관리자 통제 등록 검증을 추가한다.
+4. 검증된 사번만 학생 계정 생성/로그인을 허용한다.
+5. 관리자 권한은 계속 Firebase Auth admin custom claim으로 분리한다.
 
-Practical near-term options:
+선택지:
 
-| Option | Fit |
+| 방식 | 적합도 |
 |---|---|
-| Admin pre-registration | Good first operational control |
-| One-time registration code | Good if admins can distribute codes |
-| Vercel/Firebase Function validation | Best technical direction |
-| Company SSO/email | Best long-term identity solution |
+| 관리자 사전 등록 | 내부 운영용 1차 통제로 적합 |
+| 일회용 등록코드 | 코드 배포/회수 절차가 있으면 적합 |
+| Vercel/Firebase Function 검증 | 사번 UX 유지와 보안성을 함께 만족하는 방향 |
+| 회사 SSO/email | 장기적으로 가장 안정적인 신원 확인 방식 |
 
-## Current Recommendation
+## 결론
 
-Do not implement a fake client-side employee allowlist. Continue with current admin claim work, then prioritize student credential removal and employee validation design with the system owner.
+client-side 직원 allowlist는 도입하지 않는다. 관리자 claim 구조는 유지하고, 다음 보안 작업에서는 학생 공통 인증값 제거와 사번 검증 정책 확정을 우선한다.

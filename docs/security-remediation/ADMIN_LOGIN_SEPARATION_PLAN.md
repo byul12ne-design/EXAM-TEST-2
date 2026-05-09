@@ -1,39 +1,39 @@
-# Admin Login Separation Plan
+# 관리자 로그인 분리 현황
 
-## Current Status
+## 현재 상태
 
-This plan has been implemented for the current codebase.
+이 문서의 계획은 현재 코드에 구현되어 있다.
 
-| Item | Current State |
+| 항목 | 현재 상태 |
 |---|---|
-| Student login UX | Preserved |
-| Admin login UI | Implemented separately |
-| Admin ID namespace | Separated from student employee ID namespace |
-| Internal admin email | `${adminId}@wuerth-admin.exam` |
-| Admin authentication | Firebase Auth `signInWithEmailAndPassword` |
-| Admin authorization | Firebase ID token custom claim `admin: true` |
-| Claimless account handling | Immediate sign-out and access block |
-| Admin hardcoded password | Removed |
-| Firestore collection rename | Not performed |
-| DB migration | Not performed |
-| Firestore Rules production deploy | Not performed |
+| 학생 로그인 UX | 유지 |
+| 관리자 로그인 UI | 별도 구현 완료 |
+| 관리자 ID namespace | 학생 사번 namespace와 분리 |
+| 내부 관리자 email | `${adminId}@wuerth-admin.exam` |
+| 관리자 인증 | Firebase Auth `signInWithEmailAndPassword` |
+| 관리자 권한 확인 | Firebase ID token의 `admin: true` Custom Claim |
+| claim 없는 계정 처리 | 즉시 로그아웃 후 접근 차단 |
+| 관리자 하드코딩 비밀번호 | 제거 완료 |
+| Firestore collection rename | 수행하지 않음 |
+| DB migration | 수행하지 않음 |
+| Firestore Rules production 배포 | 미적용 |
 
-No real admin ID, email, UID, password, service account path, or Firebase project value is recorded in this document.
+실제 관리자 ID, email, uid, 비밀번호, service account 경로, Firebase project 실값은 기록하지 않는다.
 
-## Implemented Flow
+## 구현된 흐름
 
-| Step | Behavior |
+| 순서 | 동작 |
 |---|---|
-| 1 | User opens admin login screen from the login card |
-| 2 | Admin enters administrator ID and password |
-| 3 | The app normalizes the admin ID to lowercase |
-| 4 | The app builds internal Firebase Auth email as `${adminId}@wuerth-admin.exam` |
-| 5 | The app calls `signInWithEmailAndPassword(auth, adminEmail, password)` |
-| 6 | The app calls `getIdTokenResult(user, true)` |
-| 7 | If `claims.admin === true`, the app enters `admin-dash` |
-| 8 | If claim is missing, the app calls `signOut(auth)` and shows an authorization error |
+| 1 | 사용자가 로그인 카드에서 관리자 로그인 화면으로 이동 |
+| 2 | 관리자 ID와 비밀번호 입력 |
+| 3 | 앱이 관리자 ID를 lowercase로 normalize |
+| 4 | 앱이 내부 Firebase Auth email을 `${adminId}@wuerth-admin.exam` 형식으로 생성 |
+| 5 | `signInWithEmailAndPassword(auth, adminEmail, password)` 호출 |
+| 6 | `getIdTokenResult(user, true)` 호출 |
+| 7 | `claims.admin === true`이면 `admin-dash` 진입 |
+| 8 | claim이 없으면 `signOut(auth)` 후 권한 오류 표시 |
 
-Representative implementation shape:
+구현 형태:
 
 ```ts
 const adminEmail = `${normalizedAdminId}@wuerth-admin.exam`;
@@ -46,50 +46,50 @@ if (token.claims.admin !== true) {
 }
 ```
 
-## Actual Code References
+## 실제 코드 기준 위치
 
-| Area | File | Current Role |
+| 영역 | 파일 | 현재 역할 |
 |---|---|---|
-| Auth imports | `src/App.tsx` | Uses Firebase Auth sign-in/sign-out/token functions |
-| Admin login state | `src/App.tsx` | Holds admin ID/password form values |
-| Admin login handler | `src/App.tsx` | Performs Firebase Auth login and claim check |
-| Admin access recheck | `src/App.tsx` | Revalidates claim for existing session |
-| Admin data subscription | `src/App.tsx` | Runs only when `isAdmin && isAdminView` |
-| Firestore Rules policy | `firestore.rules` | Uses `request.auth.token.admin == true` |
+| Auth import | `src/App.tsx` | Firebase Auth login/logout/token 함수 사용 |
+| 관리자 로그인 state | `src/App.tsx` | 관리자 ID/password form 값 보관 |
+| 관리자 로그인 handler | `src/App.tsx` | Firebase Auth 로그인과 claim 확인 수행 |
+| 관리자 접근 재확인 | `src/App.tsx` | 기존 session의 claim 재검증 |
+| 관리자 데이터 구독 | `src/App.tsx` | `isAdmin && isAdminView`일 때만 실행 |
+| Firestore Rules 정책 | `firestore.rules` | `request.auth.token.admin == true` 사용 |
 
-## Student Flow Impact
+## 학생 흐름 영향
 
-| Student Flow | Current State |
+| 학생 흐름 | 현재 상태 |
 |---|---|
-| Employee ID input | Preserved |
-| Student pseudo email | Preserved |
-| Student registration/login | Preserved |
-| Student shared credential | Still unresolved |
-| Employee ID validation | Still unresolved external dependency |
+| 사번 입력 | 유지 |
+| 학생 pseudo email | 유지 |
+| 학생 회원가입/로그인 | 유지 |
+| 학생 공통 인증값 | 미해결 |
+| 사번 실제 직원 검증 | 외부 정책/원천 데이터 필요 |
 
-The admin login separation intentionally did not change student onboarding or student authentication in this step.
+이번 관리자 로그인 분리 작업은 학생 onboarding이나 학생 인증 구조를 변경하지 않았다.
 
-## Firebase Operations Required
+## Firebase 운영 필요사항
 
-The operator has created one admin Firebase Auth account and granted `admin: true` custom claim for the current test account. For future admin accounts, repeat this policy:
+운영자는 현재 관리자 Firebase Auth 계정 1개를 생성했고 `admin: true` Custom Claim을 부여했다. 이후 관리자 계정을 추가할 때도 같은 정책을 따른다.
 
-| Requirement | Policy |
+| 요구사항 | 정책 |
 |---|---|
-| Account creation | Firebase Authentication user must exist first |
-| Email rule | `${adminId}@wuerth-admin.exam` |
-| Password | Managed only through Firebase Auth/secure channel |
-| Claim | `admin: true` |
-| Claim propagation | Re-login or token refresh required |
-| Revocation | Remove `admin` claim and force re-login |
+| 계정 생성 | Firebase Authentication 사용자로 먼저 생성 |
+| email 규칙 | `${adminId}@wuerth-admin.exam` |
+| 비밀번호 | Firebase Auth와 보안 채널에서만 관리 |
+| claim | `admin: true` |
+| claim 반영 | 재로그인 또는 token refresh 필요 |
+| 권한 회수 | `admin` claim 제거 후 재로그인 강제 |
 
-See `docs/operations/ADMIN_CLAIM_SETUP.md` for the operating procedure.
+운영 절차는 `docs/operations/ADMIN_CLAIM_SETUP.md`를 기준으로 한다.
 
-## Remaining Work
+## 남은 작업
 
-| Priority | Work | Reason |
+| 우선순위 | 작업 | 이유 |
 |---|---|---|
-| P0 | Replace student shared credential | Current student auth still allows impersonation risk |
-| P0 | Define employee ID validation source | Fake employee IDs are not blocked by current code |
-| P0 | Deploy Firestore Rules only after staging/preview checks | Repository rules are not active in production until deployed |
-| P1 | Split auth logic into service/hook | Current logic still lives in `App.tsx` |
-| P1 | Add clearer auth/loading/error states | Claim failure and network failure need better UX |
+| P0 | 학생 공통 인증값 제거 | 현재 학생 인증은 도용 위험이 남아 있음 |
+| P0 | 사번 검증 원천/정책 확정 | 허위 사번 가입을 막을 수 없음 |
+| P0 | Firestore Rules production 배포 | repository Rules는 배포 전까지 production에 적용되지 않음 |
+| P1 | auth 로직 service/hook 분리 | 현재 로직이 `App.tsx`에 집중되어 있음 |
+| P1 | 인증/loading/error UX 보강 | claim 실패와 네트워크 실패 안내가 더 명확해야 함 |

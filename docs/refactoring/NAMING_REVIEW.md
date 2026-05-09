@@ -1,4 +1,4 @@
-﻿# Naming Review
+# 네이밍 검토
 
 ## 목적
 

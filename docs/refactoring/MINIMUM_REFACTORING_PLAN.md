@@ -1,4 +1,4 @@
-﻿# Minimum Refactoring Plan
+# 최소 리팩토링 계획
 
 ## 목표
 
@@ -61,7 +61,7 @@ src/
 └── main.tsx
 ```
 
-## Phase 1: 보안 수정 준비용 구조 분리
+## Phase 1 - 보안 수정 준비용 구조 분리
 
 목표:
 
@@ -88,7 +88,7 @@ src/
 - 기존 학생/관리자 주요 흐름이 동일하게 동작한다.
 - Firestore 기존 이름은 service mapping으로 흡수하고, collection/field migration은 별도 단계로 미룬다.
 
-## Phase 2: 권한 구조 개선
+## Phase 2 - 권한 구조 개선
 
 목표:
 
@@ -111,7 +111,7 @@ src/
 - 학생은 본인 데이터 query만 호출한다.
 - 권한 실패가 빈 화면이 아니라 명시적 오류로 표시된다.
 
-## Phase 3: 학생/관리자 화면 분리
+## Phase 3 - 학생/관리자 화면 분리
 
 목표:
 
@@ -131,7 +131,7 @@ src/
 - 학생 기능 수정이 관리자 기능 JSX를 건드리지 않는다.
 - 관리자 기능 수정이 학생 응시 state를 건드리지 않는다.
 
-## Phase 4: UX/안정성 개선
+## Phase 4 - UX/안정성 개선
 
 목표:
 
@@ -148,7 +148,7 @@ src/
 | 모바일 뒤로가기 | 학생/관리자 공통 navigation 정책 |
 | Tailwind CDN | build-time Tailwind로 전환 |
 
-## Phase 5: 테스트 가능 구조
+## Phase 5 - 테스트 가능 구조
 
 목표:
 
