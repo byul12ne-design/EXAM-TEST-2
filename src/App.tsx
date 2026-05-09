@@ -274,6 +274,34 @@ export default function App() {
     if (userProfile) await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), { answers: nextAnswers }, { merge: true });
   };
 
+  const handleMobileBack = async () => {
+    const exam = exams.find(e => e.id === currentExamId);
+    if (!exam) { setView('home'); return; }
+    const shouldLeave = window.confirm('현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
+    if (!shouldLeave) return;
+
+    if (userProfile) {
+      try {
+        if (exam.mode === 'study') {
+          await setDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`), {
+            activeQuestions,
+            queue: questionQueue,
+            firstAttemptAnswers,
+          }, { merge: true });
+        } else if (exam.mode === 'test') {
+          await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), {
+            answers: testAnswers,
+          }, { merge: true });
+        }
+        showToast('진행 상황이 저장되었습니다.');
+      } catch (e) {
+        console.error('진행 상황 저장 실패', e);
+        showToast('진행 상황 저장에 실패했습니다.');
+      }
+    }
+    setView('home');
+  };
+
   const submitExam = async (finalAnswers: Record<number, number>) => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
@@ -723,7 +751,10 @@ export default function App() {
         {view === 'student-take' && (
           <div className="max-w-2xl mx-auto w-full animate-in pb-20">
             <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-               <button onClick={() => setView('home')} className="text-slate-600 font-bold hover:text-blue-600 flex items-center gap-2">
+               <button onClick={handleMobileBack} className="md:hidden inline-flex items-center gap-2 text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-2xl font-bold shadow-sm">
+                 <span className="text-lg">←</span> 뒤로
+               </button>
+               <button onClick={() => setView('home')} className="hidden md:inline-flex text-slate-600 font-bold hover:text-blue-600 flex items-center gap-2">
                  <span>⬅️</span> 나가기
                </button>
                {exams.find(e => e.id === currentExamId)?.mode === 'study' ? (
