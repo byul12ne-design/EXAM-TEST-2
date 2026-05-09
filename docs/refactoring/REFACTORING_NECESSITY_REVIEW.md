@@ -1,4 +1,4 @@
-# 리팩토링 필요성 검토
+﻿# 리팩토링 필요성 검토
 
 ## 결론
 
@@ -14,9 +14,9 @@
 | 상태 수 | `useState` 37회, `useEffect` 2회 | 상태 간 의존성이 화면/권한/데이터 로직에 섞여 있음 |
 | Firestore 호출 수 | read/write 관련 호출 29회 | Rules 적용 시 변경 영향 범위가 넓음 |
 | 화면 전환 | `setView(...)` 17회, `view === ...` 조건 렌더링 | URL/route/guard 없이 메모리 상태로 화면 제어 |
-| Firebase 초기화 | `src/App.tsx:20-32` | env 전환과 테스트 mocking이 어려움 |
+| Firebase 초기화 | `src/lib/firebase.ts` | 분리 완료. 이후 Auth/Firestore service 분리가 필요 |
 | Auth 로직 | `src/App.tsx:170-184` | 학생/관리자 인증 방식이 같은 컴포넌트 안에 혼재 |
-| Firestore read | `src/App.tsx:105`, `src/App.tsx:109-111` | 앱 시작 시 주요 데이터 영역 전체 구독 |
+| Firestore read | `src/App.tsx` | 로그인/role 기반으로 축소됐지만 service 분리는 아직 없음 |
 | Firestore write | `src/App.tsx:147`, `177`, `192-193`, `235`, `263-274`, `286-317`, `334-356`, `491`, `545`, `565` | 관리자/학생 write 경계가 코드 구조상 분리되어 있지 않음 |
 | 관리자 로직 | `src/App.tsx:183-184`, `454-614`, `614-705` | 인증, 탭, 과정/문제/결과 관리가 App에 직접 포함 |
 | 학생 응시 로직 | `src/App.tsx:188-319`, `736-856` | 학습/퀴즈/결과 저장이 App state에 직접 의존 |
@@ -65,14 +65,14 @@ src/
 - 관리자 진입 로직: `src/App.tsx:183-184`
 - 화면 접근: `view` 상태 조건 렌더링
 
-현재는 관리자 권한을 Firebase Auth token 또는 Custom Claims로 검증할 구조가 없다. admin guard를 도입하려면 먼저 auth 상태와 role 확인을 App 바깥으로 분리해야 한다.
+현재는 Firebase Auth token과 Custom Claim으로 관리자 권한을 확인한다. 다음 단계는 이 로직을 App 바깥의 auth service/hook으로 분리해 테스트와 유지보수를 쉽게 만드는 것이다.
 
 ### 2. Firestore 접근이 역할별로 분리되어 있지 않음
 
-- 과정/결과/문제 데이터가 `src/App.tsx:109-111`에서 전체 구독된다.
+- 과정/결과/문제 데이터 구독이 로그인/role 기준으로 축소됐지만 여전히 `src/App.tsx`에 직접 구현되어 있다.
 - 학생 진행 저장, 결과 저장, 관리자 과정/문제 관리가 같은 파일에 직접 구현되어 있다.
 
-Firestore Rules를 강화하면 기존 전체 구독이 실패할 수 있다. 서비스 레이어 없이 바로 수정하면 어느 query가 어떤 역할에서 실패하는지 추적하기 어렵다.
+Firestore Rules를 변경하면 role별 query와 저장 흐름이 실패할 수 있다. 서비스 레이어 없이 바로 수정하면 어느 query가 어떤 역할에서 실패하는지 추적하기 어렵다.
 
 ### 3. UI와 데이터 mutation이 결합되어 있음
 
@@ -105,4 +105,5 @@ Firestore Rules를 강화하면 기존 전체 구독이 실패할 수 있다. �
 4. Student/Admin feature boundary
 
 이 네 경계가 생겨야 하드코딩 인증값 제거, Custom Claims, Firestore Rules, Vercel env 분리를 안전하게 적용할 수 있다.
+
 

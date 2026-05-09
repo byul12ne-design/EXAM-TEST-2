@@ -1,4 +1,4 @@
-# 운영 전 기본 동작 점검 결과
+﻿# 운영 전 기본 동작 점검 결과
 
 ## 점검 범위
 
@@ -155,3 +155,4 @@ npm run admin:claim -- --uid TEST_ADMIN_UID --service-account ./serviceAccount-t
 | 점수/결과 payload client 계산 | 미해결 |
 | Tailwind CDN runtime 의존 | 미해결 |
 | 큰 JS chunk warning | 미해결 |
+

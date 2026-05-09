@@ -1,4 +1,4 @@
-# 네이밍 검토
+﻿# 네이밍 검토
 
 ## 목적
 
@@ -296,3 +296,4 @@ Rules 원칙:
 | questionBank 문제와 course questions는 연결되는가 | snapshot/원본 경계가 이름에 없음 |
 
 따라서 보안 리팩토링 전 네이밍 기준을 정하고, Firestore migration이 필요한 이름과 code-only rename이 가능한 이름을 분리해야 한다.
+

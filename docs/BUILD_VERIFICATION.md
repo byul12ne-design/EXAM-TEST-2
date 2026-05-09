@@ -1,4 +1,4 @@
-# Build 검증
+﻿# Build 검증
 
 ## 검증 범위
 
@@ -114,3 +114,4 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 | Preview/Production Firebase 분리 | staging project 필요 |
 | Tailwind CDN 의존 | build-time 전환 필요 |
 | 큰 JS chunk | code splitting 또는 manualChunks 필요 |
+

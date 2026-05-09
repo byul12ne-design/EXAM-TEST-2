@@ -10,13 +10,13 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
-| 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
-| Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
+| 현재 빌드 결과 | production build 성공. JS chunk `637.38 kB`로 Vite 500 kB 경고 발생 |
+| Vercel 자동배포 위험 | `vercel.json`과 `.vercelignore` 없음. `.env.example`은 있고 `.env.local`은 Git 제외. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
 | Production blocking issue | Tailwind CDN 런타임 의존, Rules 배포 후 전체 smoke test 일부 미확인, 학생 공통 인증값/사번 검증 미해결, 결과 무결성/저장 실패 처리 미흡 |
-| 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
+| 현재 보안 문제 | 학생 공통 인증값, 사번 검증 부재, 결과 위변조 가능성, Preview/Production 동일 Firebase 사용 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
-| 현재 성능 문제 | 전체 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
-| 현재 수정 우선순위 | 1. Firebase Rules/권한 2. Tailwind CDN 제거 3. 인증 재설계 4. 결과 저장/임시저장 수정 5. Router/rewrite/운영 설정 정리 |
+| 현재 성능 문제 | 관리자 영역의 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
+| 현재 수정 우선순위 | 1. 학생 인증/사번 검증 2. 결과 무결성 3. Preview/Production Firebase 분리 4. Tailwind CDN 제거 5. Router/rewrite/운영 설정 정리 |
 
 # 코드 품질 분석
 
@@ -208,6 +208,7 @@ function shuffle<T>(items: T[], random = Math.random) {
 | `tailwindcss` | 빌드 타임 스타일 |
 | `vitest`, `@testing-library/react` | 단위/컴포넌트 테스트 |
 | `playwright` | 모바일/PC E2E |
+
 
 
 

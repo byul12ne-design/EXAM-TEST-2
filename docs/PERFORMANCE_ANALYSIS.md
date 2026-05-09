@@ -10,19 +10,19 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
-| 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
-| Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
+| 현재 빌드 결과 | production build 성공. JS chunk `637.38 kB`로 Vite 500 kB 경고 발생 |
+| Vercel 자동배포 위험 | `vercel.json`과 `.vercelignore` 없음. `.env.example`은 있고 `.env.local`은 Git 제외. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
 | Production blocking issue | Tailwind CDN 런타임 의존, Rules 배포 후 전체 smoke test 일부 미확인, 학생 공통 인증값/사번 검증 미해결, 결과 무결성/저장 실패 처리 미흡 |
-| 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
+| 현재 보안 문제 | 학생 공통 인증값, 사번 검증 부재, 결과 위변조 가능성, Preview/Production 동일 Firebase 사용 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
-| 현재 성능 문제 | 전체 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
-| 현재 수정 우선순위 | 1. Firebase Rules/권한 2. Tailwind CDN 제거 3. 인증 재설계 4. 결과 저장/임시저장 수정 5. Router/rewrite/운영 설정 정리 |
+| 현재 성능 문제 | 관리자 영역의 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
+| 현재 수정 우선순위 | 1. 학생 인증/사번 검증 2. 결과 무결성 3. Preview/Production Firebase 분리 4. Tailwind CDN 제거 5. Router/rewrite/운영 설정 정리 |
 
 ## Vercel Deployment Impact
 
 | 항목 | 분석 |
 |---|---|
-| production 위험 | Vercel build 산출 JS가 630.14 kB로 Vite 경고 기준을 초과한다 |
+| production 위험 | Vercel build 산출 JS가 637.38 kB로 Vite 경고 기준을 초과한다 |
 | local build와 production 차이 | local build는 성공하지만 production 모바일 네트워크에서 초기 JS 다운로드와 Firebase 초기화 체감 지연이 커질 수 있다 |
 | runtime risk | Tailwind CDN 추가 요청, 외부 로고 요청, Firebase Auth/Firestore 요청이 첫 사용 흐름에 누적된다 |
 | env risk | 환경별 Firebase project 분리가 없어 production 데이터와 테스트 데이터가 섞일 위험이 있다 |
@@ -40,19 +40,18 @@
 실제 코드:
 
 ```tsx
-// src/App.tsx:109-111
-const unsubExams = onSnapshot(collection(db, 'exams'), ...);
-const unsubResults = onSnapshot(collection(db, 'results'), ...);
-const unsubBank = 문제은행 데이터 영역 전체 실시간 구독;
+// 현재 구조 요약
+// 학생: 공개 과정과 본인 결과 중심 구독
+// 관리자: admin view에서 exams/results/questionBank 구독
 ```
 
 문제:
 
 | severity | 문제 | 영향 |
 |---|---|---|
-| 치명 | 로그인 전에도 전체 컬렉션 구독 | 보안/비용/초기 로딩 위험 |
-| 높음 | 결과 전체 구독 | 결과가 늘수록 모든 사용자의 초기 데이터량 증가 |
-| 높음 | 문제은행 전체 구독 | 관리자 외 사용자에게 불필요 |
+| 높음 | 관리자 결과/문제은행 전체 구독 | 관리자 화면에서 데이터가 늘수록 초기 로딩과 비용 증가 |
+| 높음 | 학생 목록 pagination 부재 | 공개 과정이 많아지면 초기 데이터량 증가 |
+| 보통 | 문제은행 전체 구독 | 관리자에게 필요하지만 대량 데이터에서 성능 저하 |
 | 보통 | 구독 에러 콜백 없음 | 실패 시 빈 화면처럼 보임 |
 
 After:
@@ -141,6 +140,7 @@ const StudentDashboard = lazy(() => import('./features/student/StudentDashboard'
 | 인라인 정렬 | `onSnapshot`마다 sort 실행 `src/App.tsx:109-111` | Firestore `orderBy` |
 | 클라이언트 필터 | `useMemo` 필터 `src/App.tsx:334-338` | query 조건 |
 | 큰 단일 파일 | `src/App.tsx:41-843` | route-level split |
+
 
 
 

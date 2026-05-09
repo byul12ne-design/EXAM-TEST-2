@@ -1,4 +1,4 @@
-# 인증 및 배포 운영 가이드
+﻿# 인증 및 배포 운영 가이드
 
 ## 목적
 
@@ -233,5 +233,6 @@ npx.cmd firebase-tools deploy --only firestore:rules --project "[FIREBASE_PROJEC
 | `docs/operations/ADMIN_CLAIM_SETUP.md` | 관리자 Custom Claim 부여/회수 |
 | `docs/operations/SMOKE_TEST_RESULTS.md` | 현재 기본 동작 점검 결과 |
 | `docs/security-remediation/FIREBASE_RULES_PLAN.md` | Firestore Rules 정책과 운영 상태 |
-| `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md` | Emulator 테스트 결과 |
-| `docs/security-remediation/VERCEL_ENV_SETUP.md` | Vercel env와 배포 환경 |
+| `docs/operations/VERCEL_ENV_STATUS.md` | Vercel env 운영 상태 |
+| `docs/archive/` | 완료되었거나 중복된 이전 점검 문서 |
+

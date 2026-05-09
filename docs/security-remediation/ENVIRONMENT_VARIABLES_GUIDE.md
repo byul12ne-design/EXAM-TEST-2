@@ -1,4 +1,4 @@
-# 환경변수 운영 가이드
+﻿# 환경변수 운영 가이드
 
 ## 목적
 
@@ -139,3 +139,4 @@ npm.cmd run build
 ## 결론
 
 Firebase client configuration을 env로 분리한 것은 배포 운영성과 실수 방지에 도움이 된다. 하지만 `VITE_*`는 secret 저장소가 아니므로 학생 공통 인증값이나 관리자 secret을 넣으면 안 된다. 실제 보안 경계는 Firebase Auth, Custom Claim, Firestore Rules, 필요한 경우 server-side 검증에서 만들어야 한다.
+

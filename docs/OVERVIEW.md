@@ -10,13 +10,13 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
-| 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
-| Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
+| 현재 빌드 결과 | production build 성공. JS chunk `637.38 kB`로 Vite 500 kB 경고 발생 |
+| Vercel 자동배포 위험 | `vercel.json`과 `.vercelignore` 없음. `.env.example`은 있고 `.env.local`은 Git 제외. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
 | Production blocking issue | Tailwind CDN 런타임 의존, Rules 배포 후 전체 smoke test 일부 미확인, 학생 공통 인증값/사번 검증 미해결, 결과 무결성/저장 실패 처리 미흡 |
-| 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
+| 현재 보안 문제 | 학생 공통 인증값, 사번 검증 부재, 결과 위변조 가능성, Preview/Production 동일 Firebase 사용 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
-| 현재 성능 문제 | 전체 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
-| 현재 수정 우선순위 | 1. Firebase Rules/권한 2. Tailwind CDN 제거 3. 인증 재설계 4. 결과 저장/임시저장 수정 5. Router/rewrite/운영 설정 정리 |
+| 현재 성능 문제 | 관리자 영역의 컬렉션 실시간 구독, pagination/lazy loading 부재, Firebase SDK 포함 단일 대형 chunk |
+| 현재 수정 우선순위 | 1. 학생 인증/사번 검증 2. 결과 무결성 3. Preview/Production Firebase 분리 4. Tailwind CDN 제거 5. Router/rewrite/운영 설정 정리 |
 
 ## Vercel Deployment Impact
 
@@ -25,7 +25,7 @@
 | production 위험 | `vercel.json` 없음, Tailwind CDN runtime 의존, Rules 배포 후 전체 smoke test 일부 미확인, 학생 공통 인증값/사번 검증 미해결 |
 | local build와 production 차이 | `npm.cmd run build` 성공은 `dist/` 생성만 보장한다. Vercel runtime의 CDN/Firebase/network/domain 문제는 보장하지 않는다 |
 | runtime risk | `src/App.tsx:87-99`에서 Tailwind CDN을 동적으로 삽입하고, 실패 시 `src/App.tsx:351` 로딩 화면에 머문다 |
-| env risk | `.env`, `.env.example` 없음. `import.meta.env` 미사용. Firebase client configuration와 인증값가 production bundle에 포함된다 |
+| env risk | Firebase client configuration은 `VITE_FIREBASE_*` env로 분리됨. 단, Preview/Production이 동일 Firebase project를 사용한다 |
 | SPA risk | React Router 없음. 현재 root `/`만 자연스럽고, `/admin` 같은 직접 URL은 Vercel rewrite 없으면 404 가능 |
 | mobile runtime risk | 모바일 전용 뒤로가기와 PC 나가기 동작이 다르고, iOS/Safari에서 Blob CSV 다운로드 UX가 불안정할 수 있다 |
 
@@ -35,9 +35,9 @@
 
 - 분석 기준: 최신 로컬 저장소 스냅샷
 - 기준: 현재 워크스페이스의 실제 소스코드만 사용
-- Firebase Rules: 저장소 안에 rules 파일이 없어 **미검증**
+- Firebase Rules: production 배포 완료, Emulator 20개 시나리오 통과. 실제 활성 Rules는 Firebase Dashboard에서 별도 확인 필요
 - 빌드 검증: `npm.cmd install` 후 `npm.cmd run build` 성공. 산출물은 `dist/`에 생성됨
-- build 출력: `dist/assets/index-ChkbJhwA.js` 630.14 kB, gzip 161.63 kB. Vite chunk size 경고 발생
+- build 출력: `dist/assets/index-BaebhwFW.js` 637.38 kB, gzip 163.87 kB. Vite chunk size 경고 발생
 
 ## 프로젝트 목적
 
@@ -62,7 +62,7 @@
 | 관리자 | 관리자 화면 진입, 과정 CRUD, 공개/숨김 토글 | `src/App.tsx:183-186`, `src/App.tsx:425-469` |
 | 문제은행 | 문제 수동 등록/수정/삭제, CSV 업로드, 과정으로 불러오기 | `src/App.tsx:139-168`, `src/App.tsx:471-524`, `src/App.tsx:659-705` |
 | 결과 | 결과 목록, 과정 필터, 상세 결과, CSV 다운로드, 선택 삭제 | `src/App.tsx:340-349`, `src/App.tsx:526-581` |
-| 실시간 | Firestore `onSnapshot` 전체 구독 | `src/App.tsx:101-113` |
+| 실시간 | 로그인/role 기반 Firestore `onSnapshot` 구독 | `src/App.tsx` |
 
 ## 기술 스택
 
@@ -75,7 +75,7 @@
 | Styling | Tailwind CDN 런타임 주입 + 일부 `index.css` |
 | Routing | React Router 없음. `view` 문자열 상태로 화면 전환 |
 | Test | 테스트 스크립트/테스트 파일 없음 |
-| Build | `tsc && vite build`; 현재 의존성 설치 후 성공. 단, 630.14 kB JS chunk 경고 |
+| Build | `tsc && vite build`; 현재 의존성 설치 후 성공. 단, 637.38 kB JS chunk 경고 |
 
 근거:
 
@@ -215,7 +215,7 @@ After 예시:
 | 설치 결과 | `npm.cmd install` 성공. 148 packages 변경, 155 packages audit |
 | 실행 결과 | `npm.cmd run build` 성공 |
 | 산출물 | `dist/index.html`, `dist/assets/index-C-dvAIOk.css`, `dist/assets/index-ChkbJhwA.js` |
-| 경고 | JS chunk `630.14 kB`가 Vite 기본 경고 기준 500 kB 초과 |
+| 경고 | JS chunk `637.38 kB`가 Vite 기본 경고 기준 500 kB 초과 |
 | 추가 이슈 | `npm.cmd run lint`, `npm.cmd run test`는 script 없음 |
 
 ## 런타임 의존성
@@ -250,6 +250,7 @@ After 예시:
 | 높음 | 테스트 없음 | `package.json:6-10` |
 | 보통 | `strict` TypeScript 미설정 | `tsconfig.app.json:18-22` |
 | 보통 | README/HTML 메타 불일치 | `README.md:1`, `index.html:2-7` |
+
 
 
 

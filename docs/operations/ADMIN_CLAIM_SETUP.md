@@ -1,4 +1,4 @@
-# 관리자 Custom Claim 설정 절차
+﻿# 관리자 Custom Claim 설정 절차
 
 ## 목적
 
@@ -154,3 +154,4 @@ Custom Claim 변경은 이미 발급된 ID token에 즉시 반영되지 않을 �
 4. 현재 Firebase Console Rules 백업은 public repository 밖에 보관한다.
 5. 문제가 생기면 백업한 Rules로 롤백할 수 있게 준비한다.
 6. claim 변경 후에는 다시 로그인해 ID token을 갱신한다.
+

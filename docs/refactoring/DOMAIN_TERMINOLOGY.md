@@ -1,4 +1,4 @@
-# 도메인 용어집
+﻿# 도메인 용어집
 
 ## 목적
 
@@ -139,3 +139,4 @@
 ## 유지해야 할 이름
 
 Firestore에 이미 저장된 collection/field 이름은 service mapping이 생기기 전까지 바로 바꾸지 않는다. 특히 `exams`, `results`, `studyProgress`, `testProgress`, `mode`는 migration 없이 변경하면 운영 데이터 로딩이 깨질 수 있다.
+

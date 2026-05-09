@@ -1,4 +1,4 @@
-# 보안 개선 계획
+﻿# 보안 개선 계획
 
 ## 현재 상태 요약
 
@@ -69,7 +69,7 @@ Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여�
 
 | 작업 | 대상 | 메모 |
 |---|---|---|
-| Emulator 테스트 결과 확인 | `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md` | 현재 통과 |
+| Emulator 테스트 결과 확인 | `docs/operations/SMOKE_TEST_RESULTS.md`, `docs/security-remediation/FIREBASE_RULES_PLAN.md` | 현재 통과 |
 | Firestore Rules production 배포 | Firebase Console/CLI | 완료, 운영자 확인 기준 |
 | production 기본 동작 점검 | Production URL | 관리자 CRUD와 학생 결과 저장/조회 추가 확인 필요 |
 | Vercel Preview 기본 동작 점검 | Vercel Preview URL | 동일 Firebase project 위험 수용 필요 |
@@ -138,3 +138,4 @@ Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여�
 4. owner에게 사번 검증 원천/정책을 요청한다.
 5. 정책 확정 후 학생 공통 인증값을 제거한다.
 6. 더 큰 UX 변경 전에 auth/firestore 로직을 service로 분리한다.
+

@@ -1,4 +1,4 @@
-# 최종 요약
+﻿# 최종 요약
 
 ## 현재 구현 상태
 
@@ -80,3 +80,4 @@
 4. Preview와 Production Firebase project를 분리한다.
 5. 점수/결과 검증을 서버 측으로 이동한다.
 6. 인증과 Firestore 접근 로직을 `src/App.tsx`에서 분리한다.
+

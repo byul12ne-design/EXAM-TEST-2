@@ -1,4 +1,4 @@
-# Firestore Rules 운영 상태 및 후속 점검
+﻿# Firestore Rules 운영 상태 및 후속 점검
 
 ## 현재 상태
 
@@ -120,7 +120,7 @@ claims.admin === true
 5. Rules 변경이 필요하면 Emulator 테스트를 먼저 실행한다.
 6. 새 Rules를 배포한다.
 7. 로그인, 조회, 저장 흐름이 깨지면 즉시 백업한 Rules를 다시 붙여넣고 게시한다.
-7. 실제 사용자 식별자 없이 장애 상황과 차단된 작업을 기록한다.
+8. 실제 사용자 식별자 없이 장애 상황과 차단된 작업을 기록한다.
 
 ## 이번 단계에서 하지 않는 것
 
@@ -135,3 +135,4 @@ claims.admin === true
 ## 결론
 
 Firestore Rules는 production에 배포된 상태이며, 관리자 Custom Claim 흐름과 정합성이 있다. 남은 작업은 배포 후 전체 운영 smoke test, 학생 인증 개선, 사번 실검증, 결과 무결성 강화, Preview/Production Firebase 분리다.
+

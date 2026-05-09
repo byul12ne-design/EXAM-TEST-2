@@ -1,4 +1,4 @@
-# 최소 리팩토링 계획
+﻿# 최소 리팩토링 계획
 
 ## 목표
 
@@ -209,3 +209,4 @@ src/
 자세한 기준은 `docs/refactoring/NAMING_REVIEW.md`와 `docs/refactoring/DOMAIN_TERMINOLOGY.md`를 따른다.
 
 초기 리팩토링에서는 DB collection 이름을 바로 바꾸지 않는다. 대신 service 레이어에서 기존 `exams`, `results`, `studyProgress`, `testProgress`, `questionBank`를 새 도메인 타입인 `Course`, `AttemptResult`, `StudySession`, `QuizAttempt`, `QuestionBankItem`으로 mapping한다.
+
