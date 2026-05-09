@@ -10,8 +10,8 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
-| 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
-| Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
+| 현재 빌드 결과 | `.env.local` 구성 후 production build 성공. JS chunk 약 `630.72 kB`로 Vite 500 kB 경고 발생 |
+| Vercel 자동배포 위험 | `vercel.json`, `.vercelignore` 없음. Vercel env는 Preview/Production 모두 등록 완료지만 동일 Firebase web client configuration 사용 중 |
 | Production blocking issue | Tailwind CDN 런타임 의존, Firebase Rules 미검증, 관리자/학생 인증값 bundle 노출, Firestore 전체 구독, 결과 저장 실패 처리 미흡 |
 | 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
@@ -19,6 +19,20 @@
 | 현재 수정 우선순위 | 1. Firebase Rules/권한 2. Tailwind CDN 제거 3. 인증 재설계 4. 결과 저장/임시저장 수정 5. Router/rewrite/운영 설정 정리 |
 
 # Vercel Deployment Analysis
+
+## Current Env Operations Status
+
+| 항목 | 현재 상태 |
+|---|---|
+| Firebase config 위치 | `src/lib/firebase.ts`에서 `import.meta.env.VITE_FIREBASE_*`로 로드 |
+| `.env.example` | 존재. 실제 값 없이 변수명과 placeholder만 포함 |
+| `.env.local` | 로컬 구성 완료. `.gitignore`에 의해 Git 추적 제외 |
+| local build | 권한 승인 환경에서 `npm.cmd run build` 성공 |
+| local dev | Vite dev server ready 및 `http://127.0.0.1:5173/` HTTP 200 확인 |
+| Vercel env | Preview/Production 모두 등록 완료. 현재는 동일 Firebase web client configuration 사용 중 |
+| Firebase project 분리 | 별도 staging Firebase project가 없어 아직 분리되지 않음 |
+| 운영 문서 | `docs/operations/VERCEL_ENV_STATUS.md` |
+| 남은 risk | Firebase Rules 미검증, client 인증 구조, Tailwind CDN, 전체 Firestore 구독 |
 
 ## 1. Vercel 설정 분석
 
@@ -32,7 +46,7 @@
 | Node.js version 설정 | `package.json`에 `engines` 없음, `.nvmrc` 없음 | Vercel 기본 Node 버전에 의존 |
 | SPA rewrite 설정 | 없음 | 현재는 URL 라우팅이 없지만, `/admin` 등 직접 접근 URL은 Vercel에서 404 가능 |
 | static export | 없음 | Vite SPA build |
-| environment variable 설정 | `.env`, `.env.example` 없음. 코드도 `import.meta.env` 미사용 | production env 누락으로 인한 build 실패는 없지만 config/인증값가 bundle에 포함 |
+| environment variable 설정 | `.env.example` 있음. Firebase client config는 `VITE_FIREBASE_*` 사용. Local은 `.env.local`, Vercel은 Dashboard env 사용 | Vercel env 누락 시 Firebase 초기화에서 명확한 runtime error 발생 |
 | `.vercelignore` | 없음 | Vercel 기본 ignore 및 `.gitignore`에 의존 |
 
 ## 2. 실제 build 산출물
@@ -42,7 +56,7 @@
 ```text
 dist/index.html                  0.48 kB
 dist/assets/index-C-dvAIOk.css   1.80 kB
-dist/assets/index-ChkbJhwA.js  630.14 kB │ gzip: 161.63 kB
+dist/assets/index-ni4J7uDq.js  630.72 kB │ gzip: 161.89 kB
 ```
 
 Vite warning:
@@ -60,39 +74,42 @@ dist/
 ├── icons.svg
 └── assets/
     ├── index-C-dvAIOk.css
-    └── index-ChkbJhwA.js
+    └── index-ni4J7uDq.js
 ```
 
 ## 3. 환경 변수 분석
 
 | 항목 | 실제 상태 |
 |---|---|
-| `.env` | 없음 |
-| `.env.example` | 없음 |
-| `.gitignore` env 제외 | `*.local`만 제외. `.env` 자체 제외는 없음 |
-| `import.meta.env` 사용 | 없음 |
-| `VITE_*` prefix 사용 | 없음 |
-| Firebase client configuration | `src/App.tsx:20-28` 하드코딩 |
-| production env 누락 위험 | 현재 코드 기준 env가 없어 누락으로 build가 실패하지는 않음 |
+| `.env` | 없음. Git ignore 대상 |
+| `.env.example` | 있음. placeholder만 포함 |
+| `.env.local` | 있음. 로컬 실제 값 포함, Git ignore 대상 |
+| `.gitignore` env 제외 | `.env`, `.env.*`, `!.env.example`, `*.local` 적용 |
+| `import.meta.env` 사용 | `src/lib/firebase.ts`에서 사용 |
+| `VITE_*` prefix 사용 | Firebase web client configuration 7개 변수 사용 |
+| Firebase client configuration | `src/lib/firebase.ts`에서 env 기반 로드 |
+| production env 누락 위험 | Vercel Dashboard env 누락 시 `Missing required environment variable` error 발생 |
 | sensitive value 노출 가능성 | 학생/관리자 인증값이 bundle에 포함됨 |
 
-실제 bundle 포함 확인:
+현재 bundle 관련 확인:
 
-- `dist/assets/index-ChkbJhwA.js`에 Firebase client configuration fields 포함
-- `dist/assets/index-ChkbJhwA.js`에 `[MASKED_STUDENT_SHARED_PASSWORD]` 포함
-- `dist/assets/index-ChkbJhwA.js`에 관리자 인증값 비교값 `[MASKED_ADMIN_PASSWORD]` 포함
-- `dist/assets/index-ChkbJhwA.js`에 `https://cdn.tailwindcss.com` 포함
+- Firebase client configuration은 더 이상 `src/App.tsx`에 하드코딩되어 있지 않다.
+- `VITE_*` 값은 browser bundle에 포함될 수 있는 client env이다.
+- 학생/관리자 인증 구조는 아직 다음 보안 단계로 남아 있다.
+- Tailwind CDN runtime 의존은 아직 남아 있다.
 
 ### Production env 차이
 
-현재 코드는 development/production 환경을 분리하지 않는다.
+현재 코드는 Firebase client configuration을 Local/Vercel env로 분리했다. 현재는 별도 staging Firebase project가 제공되지 않아 Preview와 Production Vercel 환경에 동일한 Firebase web client configuration이 등록되어 있다.
 
 | 구분 | 개발 | production |
 |---|---|---|
-| Firebase project | 동일 하드코딩 project `[MASKED_FIREBASE_PROJECT_ID]` | 동일 |
+| Firebase project | `.env.local` 값 | Vercel Production env 값 |
 | Tailwind | CDN runtime script | 동일 |
-| Auth credential | 동일 하드코딩 | 동일 |
-| Admin credential | 동일 하드코딩 | 동일 |
+| Auth credential | 기존 client 인증 구조 유지 | 기존 client 인증 구조 유지 |
+| Admin credential | 기존 client 인증 구조 유지 | 기존 client 인증 구조 유지 |
+
+Preview 테스트는 Production과 동일 Firebase project에 영향을 줄 수 있다. 향후 권장 상태는 Preview는 staging Firebase project, Production은 production Firebase project로 분리하는 것이다.
 
 ## 4. SPA 라우팅 분석
 

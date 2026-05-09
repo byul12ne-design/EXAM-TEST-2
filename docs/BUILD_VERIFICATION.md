@@ -10,8 +10,8 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 실제 코드 구조 | React + Vite + Firebase 단일 SPA. 핵심 로직은 `src/App.tsx`에 집중되어 있음 |
-| 현재 빌드 결과 | production build 성공. JS chunk `630.14 kB`로 Vite 500 kB 경고 발생 |
-| Vercel 자동배포 위험 | `vercel.json`, .vercelignore, .env, .env.example 없음. 실제 Dashboard 설정은 저장소만으로 확정 불가 |
+| 현재 빌드 결과 | `.env.local` 구성 후 production build 성공. JS chunk 약 `630.72 kB`로 Vite 500 kB 경고 발생 |
+| Vercel 자동배포 위험 | `vercel.json`, `.vercelignore` 없음. Vercel env는 Preview/Production 모두 등록 완료지만 동일 Firebase web client configuration 사용 중 |
 | Production blocking issue | Tailwind CDN 런타임 의존, Firebase Rules 미검증, 관리자/학생 인증값 bundle 노출, Firestore 전체 구독, 결과 저장 실패 처리 미흡 |
 | 현재 보안 문제 | 클라이언트 관리자 인증, 고정 학생 인증값, production DB 직접 read/write, 결과 위변조 가능성 |
 | 현재 UX 문제 | 로딩/에러 상태 부족, 새로고침/뒤로가기 복구 부족, 모바일/PC 나가기 동작 차이, 미응답 제출 가능 |
@@ -25,11 +25,25 @@
 | production 위험 | build는 성공하지만 Vercel 설정 파일이 없어 framework/output/rewrite/node version은 dashboard/default에 의존한다 |
 | local build와 production 차이 | 로컬 승인 환경에서는 build 성공. Vercel Node version은 repo에 pin 되어 있지 않아 동일성 보장 없음 |
 | runtime risk | build 검증은 Tailwind CDN/Firebase runtime 실패를 검증하지 않는다 |
-| env risk | env 미사용. Vercel env 누락으로 build가 깨질 가능성은 낮지만 production 설정 분리가 없다 |
+| env risk | Firebase client env는 구성됐지만 별도 staging Firebase project가 없어 Preview와 Production이 동일 Firebase project를 사용한다 |
 | SPA risk | `vercel.json` rewrites 없음. React Router 도입 시 직접 접근 404 가능 |
 | mobile runtime risk | build output만으로 iOS/Safari file input, Blob download, confirm UX를 검증할 수 없다 |
 
 # Build Verification
+
+## Current Env Verification
+
+| 항목 | 현재 상태 |
+|---|---|
+| `.env.example` | 생성 완료. 실제 값 없이 placeholder만 포함 |
+| `.env.local` | 생성 완료. 로컬 Firebase web client configuration 값 포함, Git ignore 대상 |
+| `src/lib/firebase.ts` | `VITE_FIREBASE_*` 누락 시 명확한 error throw |
+| Git 추적 상태 | `.env.local`은 ignored, `git ls-files ".env*"` 결과 실제 env 추적 없음 |
+| local build | 권한 승인 환경에서 `npm.cmd run build` 성공 |
+| local dev | 권한 승인 환경에서 Vite ready 및 `http://127.0.0.1:5173/` HTTP 200 확인 |
+| Vercel env | Preview/Production env 모두 등록 완료. 현재는 동일 Firebase web client configuration 사용 |
+| Firebase project 분리 | 현재는 별도 staging Firebase project가 제공되지 않아 Preview와 Production Vercel 환경에 동일한 Firebase web client configuration이 등록되어 있다. |
+| 남은 runtime risk | Firebase Rules 미검증, client 인증 구조, Tailwind CDN, 전체 Firestore 구독 |
 
 ## 환경
 
@@ -80,11 +94,11 @@ failed to load config from C:\Users\sins\Documents\GitHub\EXAM-TEST-2\vite.confi
 
 ```text
 vite v5.4.21 building for production...
-✓ 46 modules transformed.
+✓ 47 modules transformed.
 dist/index.html                  0.48 kB │ gzip:   0.31 kB
 dist/assets/index-C-dvAIOk.css   1.80 kB │ gzip:   0.83 kB
-dist/assets/index-ChkbJhwA.js  630.14 kB │ gzip: 161.63 kB
-✓ built in 1.54s
+dist/assets/index-ni4J7uDq.js  630.72 kB │ gzip: 161.89 kB
+✓ built in 1.48s
 ```
 
 Vite warning:
@@ -93,6 +107,22 @@ Vite warning:
 (!) Some chunks are larger than 500 kB after minification.
 Consider using dynamic import() to code-split the application.
 ```
+
+## dev 실행 확인
+
+| 명령 | 결과 |
+|---|---|
+| `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | 성공 |
+
+확인 결과:
+
+```text
+VITE v5.4.21 ready
+Local: http://127.0.0.1:5173/
+HTTP 200
+```
+
+검증용 dev server process는 확인 후 종료했다.
 
 ## lint 성공 여부
 
