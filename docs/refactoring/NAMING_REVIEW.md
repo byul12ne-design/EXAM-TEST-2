@@ -159,7 +159,7 @@
 | 현재 이름 | 위치 | 문제 | 권장 이름 | 우선순위 | 변경 영향 |
 |---|---|---|---|---|---|
 | `role` | `src/App.tsx:39`, `src/App.tsx:177` | 클라이언트 문서 필드가 실제 권한처럼 오해됨 | `profileRole` 또는 제거, 실제 권한은 `authRole`/claim | P0 | Firestore Rules/Auth 설계 영향 |
-| `adminPasswordInput` | `src/App.tsx:56`, `src/App.tsx:861` | client 인증값 입력 상태로 보안 구조 오해 유발 | `adminCredentialInput` 임시, 최종적으로 제거 | P0 | 관리자 인증 리팩토링 영향 |
+| `isAdmin` | `src/App.tsx:33`, `src/App.tsx:73-74` | admin claim 여부와 UI 접근 상태가 한 이름에 담겨 service 분리 전까지 의미가 넓음 | `hasAdminClaim` 또는 `authClaims.isAdmin` | P1 | auth service 분리 영향 |
 | `PWD` | `src/App.tsx:172` | 의미가 축약되어 있고 공통 인증값 구조를 숨김 | 제거, 임시라면 `sharedStudentCredential` | P0 | 학생 인증 리팩토링 영향 |
 | `studentId` | `src/App.tsx:38`, `src/App.tsx:313` | uid인지 사번인지 불명확 | `studentEmployeeId` | P0 | 결과 데이터 migration 가능 |
 | `Exam` | `src/App.tsx:37` | 과정/학습/퀴즈 묶음을 모두 시험처럼 표현 | `Course` | P1 | 타입/서비스/컬렉션 전반 영향 |
@@ -243,7 +243,7 @@ Rules 원칙:
 |---|---|
 | `role` | 보안 권한 오해 방지 |
 | `studentId` | uid/employeeId 혼동 방지 |
-| `adminPasswordInput` | client 인증 구조 제거 과정에서 함께 제거 |
+| `isAdmin` | service 분리 시 `hasAdminClaim`처럼 claim 기반 상태임을 드러내도록 변경 |
 | `PWD` | 공통 인증값 구조 제거 |
 
 ### 서비스 분리 시 같이 바꿀 이름
@@ -296,4 +296,3 @@ Rules 원칙:
 | questionBank 문제와 course questions는 연결되는가 | snapshot/원본 경계가 이름에 없음 |
 
 따라서 보안 리팩토링 전 네이밍 기준을 정하고, Firestore migration이 필요한 이름과 code-only rename이 가능한 이름을 분리해야 한다.
-

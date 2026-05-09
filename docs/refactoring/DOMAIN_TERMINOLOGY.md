@@ -63,7 +63,7 @@
 | 현재 함수명 | 권장 함수명 | 이유 |
 |---|---|---|
 | `handleStudentAuth` | `handleStudentSignIn` 또는 `handleStudentRegistration` | login/register 분기 명확화 |
-| `handleAdminLogin` | 제거 또는 `verifyAdminAccess` | local admin credential 구조 제거 |
+| `handleAdminAccess` | `verifyAdminAccess` 또는 `requireAdminClaim` | Firebase Auth admin claim 확인 의도 명확화 |
 | `startExam` | `startCourseActivity` | study/quiz 모두 시작 |
 | `submitExam` | `submitQuizAttempt` 또는 `completeStudySession` 분리 | 학습/퀴즈 완료 의미 분리 |
 | `handleSaveExam` | `handleSaveCourse` | 과정 저장 |
@@ -139,4 +139,3 @@
 ## 유지해야 할 이름
 
 Firestore에 이미 저장된 collection/field 이름은 service mapping이 생기기 전까지 바로 바꾸지 않는다. 특히 `exams`, `results`, `studyProgress`, `testProgress`, `mode`는 migration 없이 변경하면 운영 데이터 로딩이 깨질 수 있다.
-
