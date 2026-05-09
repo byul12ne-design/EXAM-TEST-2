@@ -86,7 +86,7 @@ env 변경 시 절차:
 | 위험 | 영향 | 권장 조치 |
 |---|---|---|
 | Preview/Production 동일 Firebase project 사용 | Preview 테스트가 production 데이터에 영향을 줄 수 있음 | staging Firebase project 생성 |
-| Firestore Rules production 미배포 | repository Rules가 아직 production을 보호하지 않음 | staging/Preview 검증 후 배포 |
+| Rules 배포 후 전체 smoke test 일부 미확인 | 배포된 Rules가 일부 운영 흐름과 충돌할 수 있음 | 관리자 CRUD와 학생 결과 저장/조회 재확인 |
 | 학생 공통 인증값 | 학생 계정 도용 위험 | 검증된 개인별 인증 흐름으로 전환 |
 | 사번 실제 직원 검증 부재 | 허위/도용 사번 가입 가능 | 서버 측 또는 관리자 통제 검증 추가 |
 | Tailwind CDN runtime 의존 | CDN 실패 시 화면 초기화 위험 | build-time Tailwind로 전환 |

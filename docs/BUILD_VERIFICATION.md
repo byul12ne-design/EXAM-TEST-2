@@ -5,8 +5,8 @@
 | 항목 | 현재 상태 |
 |---|---|
 | 기준 | 현재 repository working tree |
-| production 배포 | 수행하지 않음 |
-| Firestore Rules 배포 | 수행하지 않음 |
+| 앱 production 배포 | 저장소 기준 확인 불가 |
+| Firestore Rules 배포 | 완료, 운영자 확인 기준 |
 | 로컬 production build | 통과 |
 | 로컬 dev server | 통과 |
 | Firestore Emulator Rules 테스트 | 통과 |
@@ -91,7 +91,7 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 | 시나리오 수 | 20 |
 | 통과 | 20 |
 | 실패 | 0 |
-| production 배포 | 수행하지 않음 |
+| production 배포 | 수행하지 않음. Emulator 검증만 수행 |
 
 ## npm script 상태
 
@@ -108,7 +108,7 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 
 | 항목 | 상태 |
 |---|---|
-| Firestore Rules production 배포 | 미적용 |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 |
 | 학생 공통 인증값 | 보안 개선 필요 |
 | 사번 실제 직원 검증 | 외부 정책/원천 데이터 필요 |
 | Preview/Production Firebase 분리 | staging project 필요 |

@@ -9,8 +9,8 @@
 | Firestore Rules Emulator | 통과 |
 | admin claim script 문법 검사 | 통과 |
 | admin claim script 실제 적용 없는 테스트 실행 | 통과 |
-| production 배포 | 수행하지 않음 |
-| Firestore Rules production 배포 | 수행하지 않음 |
+| 앱 production 배포 | 저장소 기준 확인 불가 |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 |
 
 실제 관리자 ID, email, uid, 비밀번호, service account 경로, Firebase 실값은 이 문서에 기록하지 않는다.
 
@@ -27,7 +27,7 @@
 | claim 없는 관리자 계정 | 로그아웃 후 접근 차단 |
 | 관리자 계정/claim | 운영자가 생성 및 부여 완료 |
 | 실제 관리자 로그인 | 운영자가 확인 완료 |
-| Firestore Rules 초안 | 추가 완료, Emulator 검증 완료 |
+| Firestore Rules | production 배포 완료, Emulator 검증 통과 |
 
 ## 로컬 build
 
@@ -77,7 +77,7 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort
 
 학생 전체 end-to-end 제출 흐름은 이번 자동 점검에서 수행하지 않았다.
 
-## Firestore Rules production 배포 전 점검 상태
+## Firestore Rules production 배포 후 점검 상태
 
 | 영역 | 상태 |
 |---|---|
@@ -85,11 +85,11 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort
 | 로컬 첫 진입 | 통과, HTTP 200 및 root container 확인 |
 | Firestore Rules Emulator | 통과, 20개 시나리오 |
 | admin claim 계정 실제 로그인 | 운영자 확인 완료 |
-| 관리자 과정/문제/결과 조회 | production Rules 배포 전 운영자 확인 필요 |
-| 관리자 생성/수정/삭제 | production Rules 배포 전 운영자 확인 필요 |
-| 학생 회원가입/로그인 | production Rules 배포 전 운영자 확인 필요 |
-| 학생 결과 저장/조회 | production Rules 배포 전 운영자 확인 필요 |
-| claim 없는 관리자 접근 차단 | Emulator와 앱 로직 기준 확인, 실제 앱 재확인 권장 |
+| 관리자 과정/문제/결과 조회 | production Rules 배포 후 운영자 추가 확인 필요 |
+| 관리자 생성/수정/삭제 | production Rules 배포 후 운영자 추가 확인 필요 |
+| 학생 회원가입/로그인 | production Rules 배포 후 운영자 추가 확인 필요 |
+| 학생 결과 저장/조회 | production Rules 배포 후 운영자 추가 확인 필요 |
+| claim 없는 관리자 접근 차단 | Emulator와 앱 로직 기준 확인, production 앱 재확인 권장 |
 | 비로그인 민감 데이터 접근 차단 | Emulator와 앱 로직 기준 확인 |
 
 ## Firestore Rules Emulator
@@ -112,7 +112,7 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 | 통과 | 20 |
 | 실패 | 0 |
 | production data 접근 | 없음 |
-| production Rules 배포 | 없음 |
+| production Rules 배포 | Emulator 실행 중에는 없음. 이후 운영자가 production 배포 완료 |
 
 시나리오 요약:
 
@@ -150,7 +150,7 @@ npm run admin:claim -- --uid TEST_ADMIN_UID --service-account ./serviceAccount-t
 |---|---|
 | 학생 공통 인증값 | 미해결 |
 | 사번 실제 직원 검증 | 미해결 |
-| Firestore Rules production 배포 | 미적용 |
+| Rules 배포 후 전체 production smoke test | 일부 운영자 추가 확인 필요 |
 | Preview와 Production 동일 Firebase project | 미해결 |
 | 점수/결과 payload client 계산 | 미해결 |
 | Tailwind CDN runtime 의존 | 미해결 |

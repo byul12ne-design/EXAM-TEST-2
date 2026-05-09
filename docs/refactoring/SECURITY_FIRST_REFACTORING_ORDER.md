@@ -16,7 +16,7 @@
 | 관리자 비밀번호 제거 | 완료 | `src/App.tsx` |
 | 관리자 로그인 분리 | 완료 | `src/App.tsx` |
 | 관리자 Custom Claim 확인 | 완료 | `src/App.tsx` |
-| Firestore Rules 초안 | 완료, production 미배포 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
 | Rules Emulator 테스트 | 완료, 통과 | `scripts/firestore-rules-emulator-test.mjs` |
 | admin claim 운영 스크립트 | 완료 | `scripts/set-admin-claim.mjs` |
 
@@ -28,14 +28,14 @@
 
 ## 다음 리팩토링 순서
 
-### Step 1 - production Rules 적용 준비
+### Step 1 - production Rules 운영 안정화
 
 | 작업 | 이유 |
 |---|---|
-| Preview 기본 동작 점검 | Rules 배포가 실제 사용자 흐름을 막을 수 있음 |
-| 관리자 claim 계정 확인 | 관리자 Rules가 `admin: true`에 의존 |
-| 롤백 경로 준비 | Rules 오류는 production 데이터 접근을 즉시 막을 수 있음 |
-| owner 승인 후 Rules 배포 | 현재 production 데이터 위험이 존재 |
+| production 기본 동작 점검 | 배포된 Rules가 실제 사용자 흐름과 충돌하지 않는지 확인 필요 |
+| 관리자 CRUD 재확인 | 관리자 Rules가 `admin: true`에 의존 |
+| 학생 결과 저장/조회 재확인 | result/progress payload와 Rules 정합성 확인 필요 |
+| 롤백 경로 유지 | Rules 오류는 production 데이터 접근을 즉시 막을 수 있음 |
 
 ### Step 2 - Auth service 분리
 
@@ -138,7 +138,7 @@ src/utils/scoring.ts
 | DB schema migration | 현재 보안 baseline에는 불필요 |
 | client-side 직원 allowlist | 직원 명부가 노출됨 |
 | secret을 `VITE_*`에 저장 | browser bundle에 노출됨 |
-| 점검 없는 Firestore Rules 배포 | 관리자/학생 흐름 차단 가능 |
+| 운영 smoke test 없는 Rules 재변경 | 관리자/학생 흐름 차단 가능 |
 
 ## commit 전 안전 체크리스트
 

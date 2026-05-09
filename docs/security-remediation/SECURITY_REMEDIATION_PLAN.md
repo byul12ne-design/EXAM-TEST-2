@@ -14,8 +14,8 @@
 | 관리자 로그인 | 별도 관리자 ID/password Firebase Auth 흐름 |
 | 관리자 권한 | Firebase ID token의 `admin: true` Custom Claim |
 | 관리자 계정/claim | 운영자 생성 및 claim 부여 완료, 로그인 확인 완료 |
-| Firestore Rules | 초안 추가, Emulator 20개 시나리오 통과 |
-| production Rules 배포 | 미적용 |
+| Firestore Rules | production 배포 완료, Emulator 20개 시나리오 통과 |
+| production Rules 배포 | 완료, 운영자 확인 기준 |
 | 학생 공통 인증값 | 미해결 |
 | 사번 실제 직원 검증 | 구현 없음, 외부 정책/원천 데이터 필요 |
 
@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | 치명 | 학생 도용 | 학생 흐름에 공통 인증 구조가 남아 있음 | 미해결 | 개인별 또는 검증된 인증으로 전환 |
 | 치명 | 허위 사번 등록 | 실제 직원 명부 검증 없음 | 미해결 | 서버 측 또는 관리자 통제 검증 추가 |
-| 치명 | Firestore Rules production 미적용 | Rules 초안은 repository/emulator에만 있음 | 미해결 | Preview/운영 전 점검 후 배포 |
+| 높음 | Rules 배포 후 전체 smoke test 일부 미확인 | production Rules 적용 후 일부 운영 흐름 결과가 문서상 미확인 | 추가 확인 필요 | 관리자 CRUD와 학생 결과 저장/조회 확인 |
 | 높음 | Preview 테스트가 production 데이터에 영향 | Preview와 Production이 같은 Firebase project 사용 | 미해결 | staging Firebase project 생성 |
 | 높음 | 결과 위변조 가능성 | browser가 점수/결과 payload를 생성 | 미해결 | 서버 측 검증/채점 도입 |
 | 보통 | 큰 bundle | 단일 entry에 Firebase/관리자/학생 UI 포함 | 미해결 | code splitting/manualChunks 적용 |
@@ -42,7 +42,7 @@
 | 관리자 하드코딩 비밀번호 비교 제거 | `src/App.tsx` |
 | 관리자 Custom Claim 확인 추가 | `src/App.tsx` |
 | claim 없는 관리자 로그인 차단 | `src/App.tsx` |
-| Firestore Rules 초안 추가 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
+| Firestore Rules 추가 및 production 배포 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` |
 | Rules Emulator 테스트 추가 및 실행 | `scripts/firestore-rules-emulator-test.mjs` |
 | admin claim 운영 스크립트 추가 | `scripts/set-admin-claim.mjs` |
 | admin claim 운영 문서 추가 | `docs/operations/ADMIN_CLAIM_SETUP.md` |
@@ -63,16 +63,16 @@ Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여�
 
 ## 남은 개선 계획
 
-### Phase 1 - production 보호 장치 적용 준비
+### Phase 1 - production 보호 장치 운영 안정화
 
-목표: Rules 기반 보호를 안전하게 활성화한다.
+목표: production에 적용된 Rules가 실제 운영 흐름과 충돌하지 않는지 확인한다.
 
 | 작업 | 대상 | 메모 |
 |---|---|---|
 | Emulator 테스트 결과 확인 | `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md` | 현재 통과 |
+| Firestore Rules production 배포 | Firebase Console/CLI | 완료, 운영자 확인 기준 |
+| production 기본 동작 점검 | Production URL | 관리자 CRUD와 학생 결과 저장/조회 추가 확인 필요 |
 | Vercel Preview 기본 동작 점검 | Vercel Preview URL | 동일 Firebase project 위험 수용 필요 |
-| Firestore Rules 배포 | Firebase Console/CLI | 점검 없이 배포 금지 |
-| production 기본 동작 점검 | Production URL | 배포 직후 학생/관리자 흐름 확인 |
 
 ### Phase 2 - 학생 인증 개선
 
@@ -116,7 +116,7 @@ Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여�
 | `.env.example` | placeholder만 포함 |
 | public docs | 실제 인증값과 우회 절차 없음 |
 | Firebase client 변수명 | 변수명만 포함 |
-| Firestore Rules 초안 | 실제 uid/email/project 값 없음 |
+| Firestore Rules | 실제 uid/email/project 값 없음 |
 | admin claim script | secret 내장 없음 |
 
 올리면 안 되는 것:
@@ -134,7 +134,7 @@ Custom Claim은 Firebase Admin SDK 또는 안전한 운영 절차로만 부여�
 
 1. collection rename이나 DB migration은 아직 하지 않는다.
 2. 현재 관리자 claim 흐름을 기준 상태로 유지한다.
-3. Preview 점검과 롤백 계획 후 Firestore Rules를 배포한다.
+3. Rules 배포 후 production smoke test를 완료한다.
 4. owner에게 사번 검증 원천/정책을 요청한다.
 5. 정책 확정 후 학생 공통 인증값을 제거한다.
 6. 더 큰 UX 변경 전에 auth/firestore 로직을 service로 분리한다.

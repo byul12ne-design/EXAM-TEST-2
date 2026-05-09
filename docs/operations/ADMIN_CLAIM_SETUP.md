@@ -6,11 +6,13 @@
 
 현재 앱은 관리자 화면 진입 전에 Firebase Auth ID token의 Custom Claim을 확인한다.
 
+Firebase CLI 로그인/로그아웃과 Firestore Rules 배포 절차는 `docs/operations/AUTH_AND_DEPLOY_OPERATION_GUIDE.md`를 함께 확인한다.
+
 ```text
 admin: true
 ```
 
-웹 앱은 이 claim이 있을 때만 관리자 화면 접근을 허용한다. Firestore Rules 초안도 동일하게 `request.auth.token.admin == true` 정책을 사용한다.
+웹 앱은 이 claim이 있을 때만 관리자 화면 접근을 허용한다. production에 배포된 Firestore Rules도 동일하게 `request.auth.token.admin == true` 정책을 사용한다.
 
 실제 관리자 ID, email, uid, 비밀번호, service account 경로, private key, Firebase project 실값은 이 문서에 기록하지 않는다.
 
@@ -24,7 +26,7 @@ admin: true
 | 관리자 Auth 계정 | 운영자가 1개 생성 완료 |
 | 관리자 Custom Claim | 운영자가 `admin: true` 부여 완료 |
 | 실제 관리자 로그인 | 운영자가 확인 완료 |
-| Firestore Rules production 배포 | 미적용 |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 |
 | 학생 인증 위험 | 학생 공통 인증값과 사번 검증 문제가 남아 있음 |
 
 ## 필요한 권한
@@ -137,18 +139,18 @@ Custom Claim 변경은 이미 발급된 ID token에 즉시 반영되지 않을 �
 
 | 주의사항 | 상태 |
 |---|---|
-| Firestore Rules production 배포 | 미적용 |
+| Rules 배포 후 전체 smoke test | 일부 운영자 추가 확인 필요 |
 | 학생 공통 인증값 | 미해결 |
 | 사번 실제 직원 검증 | 외부 정책/원천 데이터 필요 |
 | Preview와 Production 동일 Firebase project 사용 | staging 분리 필요 |
 
-## Firestore Rules 배포 전 확인
+## Firestore Rules 배포 후 운영 확인
 
-repository의 `firestore.rules`를 production에 게시하기 전에 다음을 확인한다.
+`firestore.rules`는 production에 배포된 상태다. Rules 변경이나 재배포가 필요할 때는 다음을 확인한다.
 
 1. 관리자 계정으로 관리자 대시보드 진입이 가능한지 확인한다.
 2. 관리자 과정/문제은행/결과 조회 흐름을 확인한다.
 3. 배포 직후 사용할 관리자 쓰기 흐름을 확인한다.
-4. 현재 Firebase Console Rules를 public repository 밖에 백업한다.
-5. 배포 중 롤백 절차를 바로 실행할 수 있게 준비한다.
+4. 현재 Firebase Console Rules 백업은 public repository 밖에 보관한다.
+5. 문제가 생기면 백업한 Rules로 롤백할 수 있게 준비한다.
 6. claim 변경 후에는 다시 로그인해 ID token을 갱신한다.

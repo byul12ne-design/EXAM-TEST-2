@@ -1,8 +1,10 @@
-# Firestore Rules 계획 및 배포 전 판정
+# Firestore Rules 운영 상태 및 후속 점검
 
 ## 현재 상태
 
-repository에는 Firestore Rules 초안이 포함되어 있다. 로컬 Firestore Emulator 기준 테스트는 통과했지만, production Firebase project에는 아직 배포하지 않았다.
+repository의 Firestore Rules는 production Firebase project에 배포된 상태다. 배포 완료 여부는 운영자 확인 기준이며, 저장소만으로 Firebase Dashboard의 실제 활성 Rules를 직접 검증할 수는 없다.
+
+로컬 Firestore Emulator 기준 테스트는 20개 시나리오를 통과했다. production 배포 후에도 관리자/학생 핵심 흐름은 실제 배포 URL에서 계속 확인해야 한다.
 
 | 항목 | 현재 상태 |
 |---|---|
@@ -11,7 +13,7 @@ repository에는 Firestore Rules 초안이 포함되어 있다. 로컬 Firestore
 | `firestore.indexes.json` | 존재, 현재 custom composite index 없음 |
 | Emulator test script | 존재 |
 | Emulator 결과 | 20개 시나리오 통과 |
-| production 배포 | 미적용 |
+| production 배포 | 완료, 운영자 확인 기준 |
 | 관리자 인증 정합성 | 앱과 Rules 모두 `admin: true` claim 사용 |
 
 ## 현재 Rules 정책
@@ -60,7 +62,7 @@ claims.admin === true
 
 | 한계 | 영향 | 후속 조치 |
 |---|---|---|
-| Rules production 미배포 | repository 파일은 배포 전까지 production DB를 보호하지 않음 | Preview/운영 전 점검 후 배포 |
+| Rules 배포 후 전체 smoke test 일부 미확인 | 일부 운영 흐름이 Rules와 충돌할 수 있음 | 관리자 CRUD와 학생 결과 저장/조회 재확인 |
 | 학생 공통 인증값 유지 | 학생 도용 위험 유지 | 개인별 인증 또는 검증된 등록 흐름으로 전환 |
 | 사번 실제 직원 검증 부재 | 허위 사번 등록 차단 불가 | 서버 측 또는 관리자 통제 검증 추가 |
 | 결과 payload client 계산 | 점수/정답 무결성 보장 불가 | 서버 측 검증/채점 도입 |
@@ -76,20 +78,20 @@ claims.admin === true
 | 관리자 데이터 구독 | admin claim 확인 후 관리자 view에서만 실행 | admin claim rule과 일치 |
 | 문제은행 | 관리자 전용 UI/data 흐름 | admin-only rule과 일치 |
 
-## production 배포 전 조건
+## production 배포 후 운영 확인
 
-`firestore.rules`를 production에 배포하기 전에 다음을 완료한다.
+`firestore.rules`는 production에 배포된 상태다. 운영자는 배포 후 또는 Rules 재배포 시 다음을 확인한다.
 
 1. 대상 관리자 Firebase Auth 계정이 존재하는지 확인한다.
 2. 각 관리자 계정에 `admin: true`가 부여되어 있는지 확인한다.
 3. claim 부여 후 관리자 계정이 재로그인했는지 확인한다.
 4. Emulator 테스트를 실행한다.
-5. Vercel Preview에서 운영 전 기본 동작 점검을 수행한다.
-6. Preview 테스트가 production 데이터를 변경할 수 있음을 수용하거나 staging Firebase project를 먼저 만든다.
-7. Firebase Console 또는 Firebase CLI로 Rules를 배포한다.
-8. 배포 직후 production 기본 동작 점검을 수행한다.
+5. Production URL에서 관리자 로그인, 조회, 생성, 수정, 삭제 흐름을 확인한다.
+6. Production URL에서 학생 로그인, 공개 과정 조회, 퀴즈 응시, 결과 저장/조회 흐름을 확인한다.
+7. Preview 테스트가 production 데이터를 변경할 수 있음을 인지하고 staging Firebase project 분리를 계획한다.
+8. 문제가 발생하면 public repository 밖에 보관한 Rules 백업으로 롤백한다.
 
-## production 배포 전 판정
+## production 배포 후 상태 판정
 
 | 항목 | 상태 | 배포 영향 |
 |---|---|---|
@@ -101,21 +103,23 @@ claims.admin === true
 | 학생 결과 create | 현재 결과 payload key와 일치 | 점수 무결성은 별도 문제 |
 | progress 문서 ID | `${uid}_${examId}` prefix rule과 일치 | 현재 코드 기준 동작 예상 |
 | questionBank | 관리자 전용 | 학생 차단 예상 |
-| 현재 Console Rules 백업 | repository에서 확인 불가 | 배포 전 반드시 백업 필요 |
-| 실제 앱 관리자 write 점검 | repository에서 확인 불가 | 배포 전 반드시 운영자 확인 필요 |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 | 활성 Rules는 Firebase Dashboard에서 별도 확인 필요 |
+| 기존 Console Rules 백업 | internal 영역 또는 repository 밖 보관 필요 | commit 금지 |
+| 실제 앱 관리자 write 점검 | 문서상 전체 결과 미확인 | 배포 후 운영자 추가 확인 필요 |
 
-현재 판정: **즉시 production 배포는 차단됨**. 현재 Firebase Console Rules 백업과 실제 앱 기본 동작 점검이 완료되어야 한다. 완료 후에도 Preview와 Production이 같은 Firebase project를 쓰므로 **주의 필요 상태**로 배포해야 한다.
+현재 판정: **Rules는 production에 적용 완료, 운영은 주의 필요 상태**다. Emulator는 통과했지만, Preview와 Production이 같은 Firebase project를 쓰고 학생 인증 위험이 남아 있으므로 전체 운영 smoke test와 사번 검증 개선이 계속 필요하다.
 
 ## 롤백 계획
 
-배포 전 절차:
+재배포 또는 장애 대응 절차:
 
 1. 대상 Firebase project의 Firebase Console을 연다.
 2. 현재 활성화된 Firestore Rules를 복사한다.
 3. 백업을 public repository 밖 또는 `docs/internal/`에 저장한다.
 4. project-specific 민감 context가 포함될 수 있으므로 백업 파일은 commit하지 않는다.
-5. 새 Rules를 배포한다.
-6. 로그인, 조회, 저장 흐름이 깨지면 즉시 백업한 Rules를 다시 붙여넣고 게시한다.
+5. Rules 변경이 필요하면 Emulator 테스트를 먼저 실행한다.
+6. 새 Rules를 배포한다.
+7. 로그인, 조회, 저장 흐름이 깨지면 즉시 백업한 Rules를 다시 붙여넣고 게시한다.
 7. 실제 사용자 식별자 없이 장애 상황과 차단된 작업을 기록한다.
 
 ## 이번 단계에서 하지 않는 것
@@ -125,9 +129,9 @@ claims.admin === true
 | collection rename | migration 필요 |
 | DB migration | 현재 범위 아님 |
 | client에서 Custom Claim 부여 | Admin SDK 또는 안전한 backend에서만 가능 |
-| 운영 전 점검 없는 production Rules 배포 | 관리자/학생 흐름을 막을 수 있음 |
+| 운영 smoke test 없는 Rules 재변경 | 관리자/학생 흐름을 막을 수 있음 |
 | 실제 관리자 식별자 문서 기록 | 운영 계정 노출 위험 |
 
 ## 결론
 
-Rules 초안은 repository에 유지하고, Emulator 테스트를 안전장치로 사용한다. production 배포는 관리자 claim 계정, Preview/운영 전 기본 동작 점검, 롤백 준비가 확인된 뒤 진행한다.
+Firestore Rules는 production에 배포된 상태이며, 관리자 Custom Claim 흐름과 정합성이 있다. 남은 작업은 배포 후 전체 운영 smoke test, 학생 인증 개선, 사번 실검증, 결과 무결성 강화, Preview/Production Firebase 분리다.

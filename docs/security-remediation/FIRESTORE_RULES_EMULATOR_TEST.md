@@ -2,9 +2,9 @@
 
 ## 목적
 
-이 문서는 repository의 `firestore.rules` 초안을 로컬 Firestore Emulator로 검증한 결과를 기록한다.
+이 문서는 repository의 `firestore.rules`를 로컬 Firestore Emulator로 검증한 결과를 기록한다.
 
-테스트는 로컬 Emulator에서만 수행했다. production Firebase Rules 배포는 하지 않았고, production 데이터에도 접근하지 않았다.
+Emulator 테스트 자체는 로컬에서만 수행했으며 production 데이터에 접근하지 않았다. 이후 운영자가 동일한 Rules를 production Firebase project에 배포 완료한 상태다.
 
 ## 현재 테스트 구성
 
@@ -35,14 +35,14 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 | 총 시나리오 | 20 |
 | 통과 | 20 |
 | 실패 | 0 |
-| production 배포 | 수행하지 않음 |
+| production 배포 | Emulator 실행 중에는 수행하지 않음. 이후 운영자 배포 완료 |
 | production data 접근 | 수행하지 않음 |
 
 차단되어야 하는 시나리오에서 출력된 `PERMISSION_DENIED` 메시지는 정상적인 negative test 결과다.
 
-## production 배포 전 재점검
+## Emulator 검증 이력
 
-최근 배포 전 재점검에서도 동일한 결과가 나왔다.
+최근 Emulator 재점검에서도 동일한 결과가 나왔다.
 
 | 확인 항목 | 결과 |
 |---|---|
@@ -51,9 +51,9 @@ npx.cmd firebase-tools emulators:exec --project demo-exam-test-rules --only fire
 | 총 시나리오 | 20 |
 | 통과 | 20 |
 | 실패 | 0 |
-| production Rules 배포 | 수행하지 않음 |
+| production Rules 배포 | Emulator 명령에서는 수행하지 않음 |
 
-Emulator 결과는 repository Rules 초안이 준비된 비로그인/학생/claim 없는 사용자/admin claim 사용자 시나리오와 일치함을 확인한다. 다만 실제 Vercel Preview 앱에서의 운영 전 기본 동작 점검을 대체하지는 않는다.
+Emulator 결과는 repository Rules가 준비된 비로그인/학생/claim 없는 사용자/admin claim 사용자 시나리오와 일치함을 확인한다. 다만 실제 Vercel Preview 또는 production 앱에서의 운영 전 기본 동작 점검을 대체하지는 않는다.
 
 ## 시나리오 범위
 
@@ -94,24 +94,24 @@ Emulator 결과는 repository Rules 초안이 준비된 비로그인/학생/clai
 
 | 이슈 | 현재 위험 |
 |---|---|
-| Rules production 미배포 | production은 아직 현재 Firebase에 배포된 Rules를 사용함 |
+| Rules 배포 후 전체 smoke test 일부 미확인 | 실제 운영 흐름 일부는 추가 확인 필요 |
 | 학생 공통 인증값 | Rules만으로 사번 사용자가 실제 직원인지 증명할 수 없음 |
 | 사번 실제 직원 검증 부재 | 형식이 맞는 허위 사번 등록을 막지 못함 |
 | 결과 payload client 계산 | Rules만으로 점수/정답 무결성을 완전히 보장할 수 없음 |
 | Preview/Production 동일 Firebase 사용 | Preview 점검이 production 데이터에 영향을 줄 수 있음 |
 
-## production 배포 gate
+## production 배포 후 확인 항목
 
-다음 조건이 끝나기 전에는 Rules를 배포하지 않는다.
+Rules는 production에 배포된 상태다. 다음 항목은 배포 후에도 계속 확인한다.
 
-1. 관리자 claim 계정 확인.
-2. 학생 기본 동작 점검 통과.
-3. 관리자 기본 동작 점검 통과.
+1. 관리자 claim 계정 로그인 확인.
+2. 학생 기본 동작 점검.
+3. 관리자 기본 동작 점검.
 4. Preview 데이터 위험 수용 또는 staging Firebase project 준비.
-5. 롤백 계획 준비.
+5. 롤백 계획 유지.
 
-현재 gate 상태: 현재 Firebase Console Rules 백업과 실제 앱 학생/관리자 기본 동작 점검이 완료될 때까지 배포 차단.
+현재 상태: production Rules 배포 완료, 전체 운영 smoke test는 일부 추가 확인 필요.
 
 ## 결론
 
-현재 Firestore Rules 초안은 로컬 Emulator 20개 시나리오를 통과했다. 관리자 Custom Claim 흐름과 정합성이 있지만, 실제 production에 적용되려면 별도 배포와 배포 직후 점검이 필요하다.
+현재 Firestore Rules는 로컬 Emulator 20개 시나리오를 통과했고 production에 배포된 상태다. 관리자 Custom Claim 흐름과 정합성이 있지만, 학생 인증과 결과 무결성 문제는 Rules만으로 해결되지 않는다.

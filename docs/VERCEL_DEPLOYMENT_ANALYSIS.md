@@ -17,7 +17,7 @@
 | Firebase config | `src/lib/firebase.ts`에서 `VITE_FIREBASE_*` 로드 |
 | Preview/Production Firebase | 현재 동일 Firebase project/config 사용 |
 | 관리자 로그인 | Firebase Auth 관리자 ID/password + `admin: true` Custom Claim |
-| Firestore Rules | 초안 존재, Emulator 테스트 통과, production 배포 미적용 |
+| Firestore Rules | Emulator 테스트 통과, production 배포 완료 |
 
 ## 저장소 기준 Vercel 설정
 
@@ -90,11 +90,11 @@ Some chunks are larger than 500 kB after minification.
 
 | 심각도 | 위험 | 현재 원인 | 권장 조치 |
 |---|---|---|---|
-| 치명 | Firestore Rules production 미배포 | Rules가 repository/emulator에만 있음 | staging/Preview 점검 후 배포 |
 | 치명 | 학생 공통 인증값 유지 | 학생 로그인에 공통 인증 구조가 남아 있음 | 검증된 개인별 인증 흐름으로 전환 |
 | 치명 | 사번 실제 직원 검증 부재 | 기본 형식 검증만 존재 | 서버 측 또는 관리자 통제 검증 도입 |
 | 높음 | Preview가 production Firebase 사용 | Preview와 Production Firebase config가 동일 | staging Firebase project 추가 |
 | 높음 | 결과 payload client 계산 | 점수/결과가 browser에서 만들어짐 | 서버 측 검증/채점 도입 |
+| 높음 | Rules 배포 후 production smoke test | 전체 학생/관리자 흐름 확인이 문서상 완료되지 않음 | 배포 후 운영 전 기본 동작 점검 기록 |
 | 보통 | 큰 JS chunk | 단일 entry bundle 구조 | code splitting/manualChunks 적용 |
 | 보통 | Tailwind CDN 의존 | runtime 스타일 의존성 유지 | build-time Tailwind로 전환 |
 | 보통 | Node version 미고정 | Vercel과 로컬 Node 차이 가능 | owner 합의 후 `engines` 또는 `.nvmrc` 추가 |
@@ -103,7 +103,7 @@ Some chunks are larger than 500 kB after minification.
 
 production 운영 가능 판정 전 필요한 작업:
 
-1. Firestore Rules를 배포하고 관리자/학생 흐름을 검증한다.
+1. Firestore Rules 배포 후 production 관리자/학생 흐름을 확인한다.
 2. 학생 공통 인증값을 제거한다.
 3. 실제 직원 사번 검증을 추가한다.
 4. Preview와 Production Firebase project를 분리한다.

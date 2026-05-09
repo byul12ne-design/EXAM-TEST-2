@@ -16,7 +16,7 @@
 | 관리자 하드코딩 비밀번호 | 제거 완료 |
 | Firestore collection rename | 수행하지 않음 |
 | DB migration | 수행하지 않음 |
-| Firestore Rules production 배포 | 미적용 |
+| Firestore Rules production 배포 | 완료, 운영자 확인 기준 |
 
 실제 관리자 ID, email, uid, 비밀번호, service account 경로, Firebase project 실값은 기록하지 않는다.
 
@@ -90,6 +90,6 @@ if (token.claims.admin !== true) {
 |---|---|---|
 | P0 | 학생 공통 인증값 제거 | 현재 학생 인증은 도용 위험이 남아 있음 |
 | P0 | 사번 검증 원천/정책 확정 | 허위 사번 가입을 막을 수 없음 |
-| P0 | Firestore Rules production 배포 | repository Rules는 배포 전까지 production에 적용되지 않음 |
+| P0 | Rules 배포 후 전체 smoke test | 관리자 CRUD와 학생 결과 저장/조회 추가 확인 필요 |
 | P1 | auth 로직 service/hook 분리 | 현재 로직이 `App.tsx`에 집중되어 있음 |
 | P1 | 인증/loading/error UX 보강 | claim 실패와 네트워크 실패 안내가 더 명확해야 함 |
