@@ -10,14 +10,15 @@
 1. Git/env 안전장치
 2. 도메인 네이밍 기준 고정
 3. Firebase config 분리
-4. Auth service 분리
-5. Firestore service 분리
-6. Admin/student guard 설계
-7. 전체 구독 제거
-8. 화면 분리
-9. UX 안정성 보강
-10. 테스트 가능 함수 분리
-11. Vercel/Firebase production 검증
+4. 사번 검증 정책 고정
+5. Auth service 분리
+6. Firestore service 분리
+7. Admin/student guard 설계
+8. 전체 구독 제거
+9. 화면 분리
+10. UX 안정성 보강
+11. 테스트 가능 함수 분리
+12. Vercel/Firebase production 검증
 ```
 
 ## Step 0: 작업 전 안전 확인
@@ -84,7 +85,7 @@ docs/refactoring/DOMAIN_TERMINOLOGY.md
 
 목표:
 
-- `src/App.tsx:20-32`에 있는 Firebase 초기화를 분리한다.
+- Firebase 초기화가 `src/lib/firebase.ts`로 분리된 상태를 유지하고, 후속 보안 작업에서 `App.tsx`가 Firebase 설정값을 직접 다루지 않게 한다.
 
 예상 파일:
 
@@ -105,11 +106,43 @@ src/App.tsx
 - Firebase client configuration은 공개 client 설정이다.
 - 이 단계만으로 관리자/학생 인증값 보안이 해결되지 않는다.
 
+## Step 3.5: 사번 검증 정책 고정
+
+목표:
+
+- 관리자 권한 개편 전에 허위 사번 가입과 사번 도용을 막을 검증 방식을 결정한다.
+- 기존 사번 기반 UX는 유지하되, 등록 가능 여부를 client가 직접 판단하지 않도록 한다.
+
+현재 근거:
+
+| 항목 | 위치 | 현재 상태 |
+|---|---|---|
+| 사번 형식 제한 | `src/App.tsx:452` | UI에서 숫자만 남기고 최대 8자리 입력 |
+| 사번 최종 검증 | `src/App.tsx:211-213` | 함수 내부에서는 길이 8자리만 확인 |
+| 이름 검증 | `src/App.tsx:215-218` | 빈값만 검사하고 사번과 이름 매칭 없음 |
+| 직원 명부 대조 | `src/App.tsx:211-221` | 구현 없음 |
+| 회원가입 profile | `src/App.tsx:218` | client가 `role: 'student'`를 포함한 `users` 문서를 생성 |
+
+정책 선택지:
+
+| 선택지 | 판단 |
+|---|---|
+| client allowlist | 직원 명부가 bundle에 노출되므로 보안 대책으로 부적합 |
+| 관리자 사전 등록 | 사내용 1차 운영에 현실적이며 허위 가입 차단 가능 |
+| 일회용 등록코드 | 사번 UX를 유지하면서 최초 등록만 제한 가능 |
+| Vercel/Firebase Function 검증 | client에 직원 명부를 노출하지 않아 권장 |
+
+최소 결과:
+
+- `verifyEmployeeForRegistration` 같은 검증 단계가 Auth 생성 전에 정의된다.
+- 학생 등록 검증과 관리자 권한 판정은 분리된다.
+- 공통 인증값 제거 작업의 전제 조건이 명확해진다.
+
 ## Step 4: Auth service 분리
 
 목표:
 
-- 학생 로그인, 로그아웃, token claim 확인을 UI에서 분리한다.
+- 학생 등록/로그인, 로그아웃, token claim 확인을 UI에서 분리한다.
 
 예상 파일:
 
@@ -123,11 +156,12 @@ src/App.tsx
 
 | 작업 | 현재 근거 | 변경 방향 |
 |---|---|---|
-| 학생 로그인 분리 | `src/App.tsx:170-180` | `loginStudent(...)` |
-| 관리자 권한 확인 분리 | `src/App.tsx:183-184` | `getCurrentUserClaims()` |
-| profile 조회 분리 | `src/App.tsx:101-107` | `loadUserProfile(uid)` |
+| 학생 등록/로그인 분리 | `src/App.tsx:211-221` | `registerStudent(...)`, `loginStudent(...)` |
+| 사번 검증 분리 | `src/App.tsx:211-218` | `verifyEmployeeForRegistration(...)` |
+| 관리자 권한 확인 분리 | `src/App.tsx:224-226` | `getCurrentUserClaims()` |
+| profile 조회 분리 | `src/App.tsx:87-94` | `loadUserProfile(uid)` |
 | role 판정 변경 | client profile role | Auth token claim |
-| 용어 변경 | `role`, `adminPasswordInput`, `PWD` | `authRole` 기준, local credential 구조 제거 |
+| 용어 변경 | `role`, `adminPasswordInput`, 학생 공통 인증값 | `authRole` 기준, local credential 구조 제거 |
 
 최소 결과:
 
@@ -154,12 +188,11 @@ src/services/progressService.ts
 
 | 현재 코드 | 분리 방향 |
 |---|---|
-| `src/App.tsx:109` 과정 전체 구독 | 공개 과정 조회, 관리자 과정 조회 분리 |
-| `src/App.tsx:110` 결과 전체 구독 | 본인 결과 조회, 관리자 결과 조회 분리 |
-| `src/App.tsx:111` 문제 저장고 전체 구독 | 관리자 전용 조회 |
-| `src/App.tsx:315` 결과 저장 | `saveStudentResult(...)` |
-| `src/App.tsx:334-348` 과정 관리 | `createExam`, `updateExam`, `deleteExam` |
-| `src/App.tsx:352-356` 문제 관리 | `saveQuestion`, `deleteQuestion` |
+| `src/App.tsx:112-123` 관리자 데이터 구독 | 관리자 service로 이동 |
+| `src/App.tsx:132-140` 학생 공개 과정/본인 결과 구독 | 학생 service로 이동 |
+| `src/App.tsx:356` 결과 저장 | `saveStudentResult(...)` |
+| `src/App.tsx:363-389`, `src/App.tsx:532` 과정 관리 | `createExam`, `updateExam`, `deleteExam`, `toggleCourseVisibility` |
+| `src/App.tsx:393-397`, `src/App.tsx:586` 문제 관리 | `saveQuestion`, `deleteQuestion` |
 
 네이밍 mapping:
 
@@ -209,11 +242,14 @@ src/App.tsx
 
 목표:
 
-- 앱 시작 시 데이터 전체 구독을 중단하고, 로그인/role 이후 필요한 데이터만 조회한다.
+- 로그인 전 데이터 구독 차단 상태를 유지하고, 현재 `App.tsx` 내부 구독 로직을 service/hook 계층으로 분리한다.
 
-현재 문제:
+현재 상태:
 
-- `src/App.tsx:109-111`에서 과정/결과/문제 데이터가 모두 구독된다.
+- `src/App.tsx:100-154`에서 비로그인 상태의 민감 collection state를 비우고 구독하지 않는다.
+- 학생 profile이 있으면 공개 과정과 본인 결과만 구독한다.
+- 관리자 화면에 진입한 경우에만 관리용 과정/결과/문제 저장고 데이터를 구독한다.
+- 이 처리는 client-side 완화이며, Firestore Rules/Claims가 실제 권한 경계가 되어야 한다.
 
 변경 방향:
 

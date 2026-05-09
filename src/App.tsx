@@ -5,7 +5,7 @@ import {
 } from 'firebase/auth';
 import { 
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, 
-  doc, setDoc, getDoc, writeBatch 
+  doc, setDoc, getDoc, writeBatch, query, where 
 } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 
@@ -69,6 +69,7 @@ export default function App() {
   const [resultFilterExamId, setResultFilterExamId] = useState<string>('all');
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
+  const isAdminDataView = view === 'admin-dash' || view === 'admin-create';
 
   useEffect(() => {
     let script = document.getElementById('tailwind-cdn') as HTMLScriptElement;
@@ -89,15 +90,69 @@ export default function App() {
       setUser(u);
       if (u) {
         const snap = await getDoc(doc(db, 'users', u.uid));
-        if (snap.exists()) setUserProfile(snap.data() as UserProfile);
+        setUserProfile(snap.exists() ? snap.data() as UserProfile : null);
       } else setUserProfile(null);
     });
-    const unsubExams = onSnapshot(collection(db, 'exams'), (snap) => setExams(snap.docs.map(d => ({ id: d.id, ...d.data() } as Exam)).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0))));
-    const unsubResults = onSnapshot(collection(db, 'results'), (snap) => setResults(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamResult)).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0))));
-    const unsubBank = onSnapshot(collection(db, 'questionBank'), (snap) => setQuestionBank(snap.docs.map(d => ({ id: d.id, ...d.data() } as BankQuestion)).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0))));
     
-    return () => { unsubAuth(); unsubExams(); unsubResults(); unsubBank(); };
+    return () => { unsubAuth(); };
   }, []);
+
+  useEffect(() => {
+    function sortByCreatedAtDesc<T extends { createdAt?: number }>(items: T[]) {
+      return items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
+
+    const clearSensitiveCollections = () => {
+      setExams([]);
+      setResults([]);
+      setQuestionBank([]);
+      setSelectedResultIds([]);
+      setSelectedResultDetail(null);
+    };
+
+    if (isAdminDataView) {
+      // TODO(security): This client-side gate only reduces unauthenticated subscriptions.
+      // Firestore Rules/claims must still enforce real read/write authorization.
+      const unsubExams = onSnapshot(collection(db, 'exams'), (snap) =>
+        setExams(sortByCreatedAtDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as Exam))))
+      );
+      const unsubResults = onSnapshot(collection(db, 'results'), (snap) =>
+        setResults(sortByCreatedAtDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamResult))))
+      );
+      const unsubBank = onSnapshot(collection(db, 'questionBank'), (snap) =>
+        setQuestionBank(sortByCreatedAtDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as BankQuestion))))
+      );
+
+      return () => {
+        unsubExams();
+        unsubResults();
+        unsubBank();
+      };
+    }
+
+    if (userProfile?.role === 'student') {
+      const visibleExamsQuery = query(collection(db, 'exams'), where('isVisible', '==', true));
+      const ownResultsQuery = query(collection(db, 'results'), where('studentId', '==', userProfile.employeeId));
+
+      const unsubExams = onSnapshot(visibleExamsQuery, (snap) =>
+        setExams(sortByCreatedAtDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as Exam))))
+      );
+      const unsubResults = onSnapshot(ownResultsQuery, (snap) =>
+        setResults(sortByCreatedAtDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamResult))))
+      );
+
+      setQuestionBank([]);
+      setSelectedResultIds([]);
+      setSelectedResultDetail(null);
+
+      return () => {
+        unsubExams();
+        unsubResults();
+      };
+    }
+
+    clearSensitiveCollections();
+  }, [isAdminDataView, userProfile?.employeeId, userProfile?.role]);
 
   const showToast = (message: string) => { setToastMessage(message); setTimeout(() => setToastMessage(null), 3000); };
 
