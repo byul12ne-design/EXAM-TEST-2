@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-  onAuthStateChanged, signOut, type User 
+  getIdTokenResult, onAuthStateChanged, signOut, type User
 } from 'firebase/auth';
 import { 
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, 
@@ -30,6 +30,8 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [questionBank, setQuestionBank] = useState<BankQuestion[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
   
   const [view, setView] = useState('home');
   const [adminTab, setAdminTab] = useState<'exams' | 'bank' | 'analytics'>('exams');
@@ -39,7 +41,8 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [empIdInput, setEmpIdInput] = useState('');
   const [nameInput, setNameInput] = useState('');
-  const [adminPasswordInput, setAdminPasswordInput] = useState(''); 
+  const [adminIdInput, setAdminIdInput] = useState('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
   
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]); 
   const [studentScore, setStudentScore] = useState(0);
@@ -69,7 +72,8 @@ export default function App() {
   const [resultFilterExamId, setResultFilterExamId] = useState<string>('all');
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
-  const isAdminDataView = view === 'admin-dash' || view === 'admin-create';
+  const isAdminView = view === 'admin-dash' || view === 'admin-create';
+  const isAdminDataView = isAdmin && isAdminView;
 
   useEffect(() => {
     let script = document.getElementById('tailwind-cdn') as HTMLScriptElement;
@@ -89,13 +93,30 @@ export default function App() {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        const snap = await getDoc(doc(db, 'users', u.uid));
-        setUserProfile(snap.exists() ? snap.data() as UserProfile : null);
-      } else setUserProfile(null);
+        try {
+          const [snap, tokenResult] = await Promise.all([
+            getDoc(doc(db, 'users', u.uid)),
+            getIdTokenResult(u, true),
+          ]);
+          setUserProfile(snap.exists() ? snap.data() as UserProfile : null);
+          setIsAdmin(tokenResult.claims.admin === true);
+        } catch (e) {
+          console.error('Auth profile or claim load failed', e);
+          setUserProfile(null);
+          setIsAdmin(false);
+        }
+      } else {
+        setUserProfile(null);
+        setIsAdmin(false);
+      }
     });
     
     return () => { unsubAuth(); };
   }, []);
+
+  useEffect(() => {
+    if (isAdminView && !isAdmin) setView('home');
+  }, [isAdmin, isAdminView]);
 
   useEffect(() => {
     function sortByCreatedAtDesc<T extends { createdAt?: number }>(items: T[]) {
@@ -221,9 +242,65 @@ export default function App() {
     } catch (e) { showToast('사번 확인 또는 최초 등록이 필요합니다.'); }
   };
 
-  const handleAdminLogin = () => {
-    if (adminPasswordInput === '2026') { setView('admin-dash'); setAdminPasswordInput(''); } 
-    else showToast('비밀번호 불일치');
+  const handleAdminAccess = async () => {
+    if (!user) {
+      showToast('관리자 접근은 Firebase Auth 로그인 후 가능합니다.');
+      setView('home');
+      return;
+    }
+
+    setIsCheckingAdmin(true);
+    try {
+      const tokenResult = await getIdTokenResult(user, true);
+      const hasAdminClaim = tokenResult.claims.admin === true;
+      setIsAdmin(hasAdminClaim);
+
+      if (hasAdminClaim) {
+        setView('admin-dash');
+      } else {
+        setView('home');
+        showToast('관리자 권한이 없습니다. admin claim을 확인해 주세요.');
+      }
+    } catch (e) {
+      console.error('Admin claim check failed', e);
+      setIsAdmin(false);
+      setView('home');
+      showToast('관리자 권한 확인에 실패했습니다.');
+    } finally {
+      setIsCheckingAdmin(false);
+    }
+  };
+
+  const handleAdminLogin = async () => {
+    const normalizedAdminId = adminIdInput.trim().toLowerCase();
+    if (!normalizedAdminId || !adminPasswordInput) return showToast('관리자 ID와 비밀번호를 입력해 주세요.');
+    if (!/^[a-z0-9._-]+$/.test(normalizedAdminId)) return showToast('관리자 ID 형식을 확인해 주세요.');
+
+    setIsCheckingAdmin(true);
+    try {
+      const adminEmail = `${normalizedAdminId}@wuerth-admin.exam`;
+      const cred = await signInWithEmailAndPassword(auth, adminEmail, adminPasswordInput);
+      const tokenResult = await getIdTokenResult(cred.user, true);
+      const hasAdminClaim = tokenResult.claims.admin === true;
+      setIsAdmin(hasAdminClaim);
+
+      if (!hasAdminClaim) {
+        await signOut(auth);
+        setAdminPasswordInput('');
+        showToast('관리자 권한이 없습니다. admin claim을 확인해 주세요.');
+        return;
+      }
+
+      setAdminIdInput('');
+      setAdminPasswordInput('');
+      setView('admin-dash');
+    } catch (e) {
+      console.error('Admin login failed', e);
+      setIsAdmin(false);
+      showToast('관리자 로그인에 실패했습니다.');
+    } finally {
+      setIsCheckingAdmin(false);
+    }
   };
 
   const handleResetProgress = async (examId: string) => {
@@ -432,7 +509,10 @@ export default function App() {
           <img src={APP_CONFIG.logoImageUrl} alt="Logo" className="h-8" />
           <span className="font-bold text-slate-800 hidden sm:block">{APP_CONFIG.logoText}</span>
         </h1>
-        {userProfile && <button onClick={() => signOut(auth)} className="mr-4 text-xs bg-slate-100 px-3 py-2 rounded-lg font-bold hover:bg-slate-200">로그아웃</button>}
+        <div className="mr-4 flex items-center gap-2">
+          {isAdmin && <button onClick={handleAdminAccess} disabled={isCheckingAdmin} className="text-xs bg-blue-50 text-blue-700 px-3 py-2 rounded-lg font-bold hover:bg-blue-100 disabled:opacity-50">관리자</button>}
+          {user && <button onClick={() => signOut(auth)} className="text-xs bg-slate-100 px-3 py-2 rounded-lg font-bold hover:bg-slate-200">로그아웃</button>}
+        </div>
       </nav>
 
       <main className="p-4 sm:p-8 max-w-4xl mx-auto w-full flex-1">
@@ -897,10 +977,36 @@ export default function App() {
         )}
 
         {view === 'admin-login' && (
-          <div className="max-w-xs mx-auto py-20 text-center animate-in space-y-8">
+          <div className="max-w-xs mx-auto py-20 text-center animate-in space-y-6">
             <h2 className="text-3xl font-black text-slate-800">Admin Login</h2>
-            <input type="password" value={adminPasswordInput} onChange={e => setAdminPasswordInput(e.target.value)} className="w-full border-2 p-5 rounded-2xl text-center text-xl font-bold outline-none" placeholder="Password" />
-            <button onClick={handleAdminLogin} className="w-full bg-slate-800 text-white py-5 rounded-2xl font-black text-lg shadow-lg">인증하기</button>
+            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleAdminLogin(); }}>
+              <label className="block text-left">
+                <span className="text-xs font-black text-slate-500 px-1">관리자 ID</span>
+                <input
+                  type="text"
+                  value={adminIdInput}
+                  onChange={e => setAdminIdInput(e.target.value.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase())}
+                  autoComplete="username"
+                  className="mt-2 w-full border-2 border-slate-100 bg-slate-50 p-4 rounded-2xl text-center text-lg font-bold outline-none focus:border-blue-500"
+                  placeholder="admin-id"
+                />
+              </label>
+              <label className="block text-left">
+                <span className="text-xs font-black text-slate-500 px-1">비밀번호</span>
+                <input
+                  type="password"
+                  value={adminPasswordInput}
+                  onChange={e => setAdminPasswordInput(e.target.value)}
+                  autoComplete="current-password"
+                  className="mt-2 w-full border-2 border-slate-100 bg-slate-50 p-4 rounded-2xl text-center text-lg font-bold outline-none focus:border-blue-500"
+                  placeholder="Password"
+                />
+              </label>
+              <button type="submit" disabled={isCheckingAdmin} className="w-full bg-slate-800 text-white py-5 rounded-2xl font-black text-lg shadow-lg disabled:opacity-50">
+                {isCheckingAdmin ? '로그인 중...' : '관리자 로그인'}
+              </button>
+            </form>
+            <button onClick={() => setView('home')} className="w-full text-slate-400 text-xs font-bold hover:text-slate-600">돌아가기</button>
           </div>
         )}
       </main>

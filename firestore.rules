@@ -19,9 +19,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // TODO(security): Replace this placeholder with the approved admin claim policy.
-      // The current app still uses client-side admin state, so deploying this draft
-      // before Custom Claims are configured will block admin reads/writes.
+      // Admin access is based on Firebase Auth Custom Claims.
+      // Deploying these rules before assigning `admin: true` to admin accounts
+      // will intentionally block admin reads/writes.
       return signedIn()
         && request.auth.token.keys().hasAny(['admin'])
         && request.auth.token.admin == true;
