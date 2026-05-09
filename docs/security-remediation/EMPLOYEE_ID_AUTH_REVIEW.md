@@ -18,7 +18,7 @@
 | 회원가입/로그인 함수 | `src/App.tsx:211-221` | 사번 8자리 확인 후 pseudo email과 공통 인증값으로 Auth 처리 |
 | 관리자 로그인 함수 | `src/App.tsx:224-226` | Firebase Auth/claim 없이 local 입력값과 하드코딩 값 비교 |
 | 사번 입력 UI | `src/App.tsx:450-455` | UI 입력 단계에서 숫자만 남기고 최대 8자리 입력 |
-| Firestore Rules 파일 | 저장소 루트 검색 | `firestore.rules`, `firebase.json` 파일 없음. 저장소 기준 Rules는 미검증 |
+| Firestore Rules 파일 | `firestore.rules`, `firebase.json` | deny-by-default 초안은 추가됐지만 실제 Firebase 배포/Emulator 검증 전 |
 
 ## 현재 학생 인증 흐름
 
@@ -50,8 +50,8 @@
 | 5. 이미 존재하는 사번이면 어떻게 되는가? | pseudo email이 같으므로 Auth 계정 생성은 Firebase 중복 오류로 실패한다. 앱은 구체 오류 대신 일반 안내만 보여준다. | `src/App.tsx:213-221` |
 | 6. 다른 사람 사번으로 로그인 가능한가? | 해당 사번의 Auth 계정이 이미 있으면 가능하다. 로그인에 개인별 인증값이 필요하지 않기 때문이다. | `src/App.tsx:213-219` |
 | 7. 고정 인증값 구조 때문에 계정 탈취 가능성이 있는가? | 있다. 사번을 알거나 추측할 수 있으면 같은 공통 인증값으로 로그인할 수 있는 구조다. | `src/App.tsx:213-219` |
-| 8. users 문서의 role을 사용자가 조작할 수 있는가? | 저장소 기준으로 차단 여부를 검증할 Rules 파일이 없다. client가 `role` 필드를 쓰는 구조이므로 Rules가 약하면 조작 위험이 있다. | `src/App.tsx:218`, Rules 파일 없음 |
-| 9. 회원가입 직후 어떤 Firestore 권한이 생기는가? | 코드상 Firebase Auth 사용자와 `users` profile 문서가 생긴다. 실제 read/write 권한은 Firestore Rules에 달려 있으나 저장소에서 검증할 수 없다. | `src/App.tsx:217-218` |
+| 8. users 문서의 role을 사용자가 조작할 수 있는가? | Rules 초안은 학생 profile create를 제한하지만, 실제 배포/검증 전이다. client가 `role` 필드를 쓰는 구조는 계속 주의가 필요하다. | `src/App.tsx:218`, `firestore.rules` |
+| 9. 회원가입 직후 어떤 Firestore 권한이 생기는가? | 코드상 Firebase Auth 사용자와 `users` profile 문서가 생긴다. 실제 운영 권한은 배포된 Firestore Rules에 달려 있으며, 현재 Rules는 초안 단계다. | `src/App.tsx:217-218`, `firestore.rules` |
 | 10. 비로그인 상태에서도 어떤 데이터를 읽는가? | 현재 코드에서는 비로그인 상태에서 `exams`, `results`, `questionBank` 구독을 시작하지 않는다. 단, Firestore Rules가 없으면 client 수정/직접 호출에 대한 최종 방어는 불가능하다. | `src/App.tsx:100-154` |
 
 ## 시나리오별 동작 분석

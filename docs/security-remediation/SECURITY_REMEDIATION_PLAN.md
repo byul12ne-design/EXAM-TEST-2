@@ -19,7 +19,7 @@
 | 관리자 화면 접근 | `src/App.tsx:224-226`, `src/App.tsx:495`, `src/App.tsx:655`, `src/App.tsx:899` | `view` 상태 전환 기반 | 클라이언트 상태만으로 관리자 화면 접근 제어 |
 | Firestore 데이터 구독 | `src/App.tsx:100-154` | 비로그인 구독은 제거됨. 학생은 공개 과정과 본인 결과만, 관리자는 관리자 화면 진입 후 전체 관리 데이터를 구독 | client-side 완화일 뿐이며 Rules/Claims 없이는 최종 보안 경계가 아님 |
 | Firestore write | `src/App.tsx:186-188`, `src/App.tsx:218`, `src/App.tsx:275`, `src/App.tsx:314`, `src/App.tsx:356`, `src/App.tsx:363-397`, `src/App.tsx:532`, `src/App.tsx:586`, `src/App.tsx:606` | client에서 직접 생성/수정/삭제 | Rules 미검증 상태에서는 운영 DB 위변조 위험 |
-| Firestore Rules 파일 | 저장소 루트 검색 | `firestore.rules`, `firebase.json` 없음 | 저장소 기준으로 권한 정책 검증 불가 |
+| Firestore Rules 파일 | `firestore.rules`, `firebase.json`, `firestore.indexes.json` | deny-by-default 초안 추가. 실제 Firebase 배포는 하지 않음 | 관리자 claim이 아직 없어 그대로 production 적용 시 관리자 기능 차단 가능 |
 | Vercel 설정 | 저장소 전체 검색 | `vercel.json`, `.vercelignore` 없음 | Dashboard 설정에 의존. repo만으로 production 설정 확정 불가 |
 | Vercel env 사용 | `src/lib/firebase.ts`, `.env.example`, `docs/operations/VERCEL_ENV_STATUS.md` | Firebase web client 설정을 Vercel env에 등록하는 구조 | Dashboard 실제 값과 배포 로그는 저장소만으로 확정 불가 |
 | `.env.example` | `.env.example` | Firebase web client 설정 변수명 placeholder 제공 | 실제 값은 `.env.local`/Vercel Dashboard에서 관리 |
@@ -32,7 +32,7 @@
 | 치명 | 관리자 인증값 노출 | client bundle에 비교값 포함 | Firebase Auth + Custom Claims 기반으로 전환 |
 | 치명 | 학생 공통 인증값 노출 | 모든 학생이 같은 인증값으로 로그인 | 개인별 인증 정책 또는 서버 검증으로 전환 |
 | 치명 | 허위 사번 가입/사번 도용 | 실제 직원 명부 대조 없이 사번 8자리만 확인 | server-side 사번 검증, 관리자 사전 등록, 초대코드 중 하나 적용 |
-| 치명 | 권한 없는 write 가능성 | Firestore Rules 파일 없음 | deny-by-default Rules 작성 및 배포 |
+| 치명 | 권한 없는 write 가능성 | Rules 초안은 추가됐지만 아직 배포/검증 전 | Emulator 검증 후 admin claim 정책과 함께 배포 |
 | 높음 | 클라이언트 구독 게이트 한계 | 비로그인 구독은 제거됐지만 관리자/학생 판정이 아직 client state/profile 기반 | Firestore Rules와 Auth Claims로 서버 측 권한 강제 |
 | 높음 | 결과 저장 위변조 가능성 | client가 점수/답안/결과를 생성 | 서버 검증 또는 Rules 검증 강화 |
 | 보통 | Vercel env 미사용 | 환경별 설정 분리 없음 | `.env.example`, Vercel env, preview/prod 분리 |
@@ -132,6 +132,8 @@
 목표:
 
 - Rules를 deny-by-default로 작성하고 역할별 read/write만 허용한다.
+- 현재 저장소에는 `firestore.rules` 초안이 추가되어 있으나, Firebase Console/CLI 배포는 아직 하지 않는다.
+- 현재 관리자 인증 구조가 client 상태 기반이므로, 초안 Rules를 그대로 production에 적용하면 관리자 기능이 차단될 수 있다.
 
 정책:
 
@@ -148,6 +150,7 @@
 - 로그인 전 전체 구독 차단 상태를 유지한다.
 - client에서 보낸 role 필드는 신뢰하지 않는다.
 - 결과 점수/정답 여부는 Rules만으로 완전 검증하기 어렵다. 운영 수준에서는 서버 검증이 필요하다.
+- 관리자 판별은 `request.auth.token.admin == true` placeholder이며, 실제 Custom Claims 정책 확정이 필요하다.
 
 ### Phase 4: Client Refactor
 
@@ -178,7 +181,7 @@
 |---|---|
 | Vercel env | preview/prod 각각 등록 |
 | Vercel build | production build 성공, chunk warning 기록 |
-| Firebase Rules | emulator 또는 staging project에서 통과 |
+| Firebase Rules | 초안 파일은 저장소에 추가됨. emulator 또는 staging project 검증 필요 |
 | 관리자 로그인 | admin claim 계정만 접근 |
 | 학생 로그인 | 본인 데이터만 접근 |
 | 결과 저장 | 권한/스키마 검증 |
@@ -193,7 +196,7 @@
 4. 하드코딩 관리자/학생 인증값 제거.
 5. Firebase Auth login 흐름 재설계.
 6. admin claim 확인 함수 추가.
-7. Firestore Rules 작성 및 emulator 검증.
+7. Firestore Rules 초안 emulator 검증 및 Custom Claims 정책 확정.
 8. `onSnapshot` 구독이 인증/역할 상태 이후에만 실행되는지 유지하고 service 계층으로 분리.
 9. 결과 저장 실패/권한 실패 UI 추가.
 10. Vercel preview/prod env 등록 후 smoke test.

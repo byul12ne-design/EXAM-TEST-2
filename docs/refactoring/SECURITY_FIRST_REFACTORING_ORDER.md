@@ -13,12 +13,13 @@
 4. 사번 검증 정책 고정
 5. Auth service 분리
 6. Firestore service 분리
-7. Admin/student guard 설계
-8. 전체 구독 제거
-9. 화면 분리
-10. UX 안정성 보강
-11. 테스트 가능 함수 분리
-12. Vercel/Firebase production 검증
+7. Firestore Rules 초안 검증
+8. Admin/student guard 설계
+9. 전체 구독 제거
+10. 화면 분리
+11. UX 안정성 보강
+12. 테스트 가능 함수 분리
+13. Vercel/Firebase production 검증
 ```
 
 ## Step 0: 작업 전 안전 확인
@@ -210,7 +211,37 @@ src/services/progressService.ts
 - Rules 강화 후 실패 위치가 service 단위로 추적된다.
 - role별 query 전환이 가능해진다.
 
-## Step 6: Guard 적용
+## Step 6.5: Firestore Rules 초안 검증
+
+목표:
+
+- 저장소에 추가된 `firestore.rules` 초안을 Firebase Emulator 또는 staging project에서 검증한다.
+- Rules 배포 전에 현재 client 코드와 충돌하는 지점을 확인한다.
+
+현재 파일:
+
+| 파일 | 상태 |
+|---|---|
+| `firestore.rules` | deny-by-default 초안 추가 |
+| `firebase.json` | Firestore rules/indexes 연결 |
+| `firestore.indexes.json` | 현재 custom composite index 없음 |
+
+검증 포인트:
+
+| 항목 | 예상 |
+|---|---|
+| 비로그인 | 모든 collection read/write 거부 |
+| 학생 | 공개 과정 read, 본인 결과/progress 접근 |
+| 학생 | `questionBank`, 전체 `results`, `exams` write 거부 |
+| 관리자 claim 없음 | 관리자 Firestore read/write 거부 |
+| 관리자 claim 있음 | 과정/문제/결과 관리 가능 |
+
+주의:
+
+- 현재 앱의 관리자 로그인은 client state 기반이므로, Custom Claims 없이 Rules를 production에 배포하면 관리자 기능이 차단된다.
+- Rules는 점수 계산, 정답 검증, 사번 실제 직원 검증을 완전히 보장하지 않는다.
+
+## Step 7: Guard 적용
 
 목표:
 
@@ -238,7 +269,7 @@ src/App.tsx
 - client guard는 UX 장치이다.
 - 실제 보안은 Firestore Rules 또는 서버 검증에서 보장해야 한다.
 
-## Step 7: 전체 구독 제거
+## Step 8: 전체 구독 제거
 
 목표:
 
@@ -264,7 +295,7 @@ src/App.tsx
 - Firestore Rules가 강화되어도 비로그인 첫 화면이 권한 오류를 만들지 않는다.
 - 학생이 관리자 데이터 영역을 요청하지 않는다.
 
-## Step 8: 학생/관리자 화면 분리
+## Step 9: 학생/관리자 화면 분리
 
 목표:
 
@@ -286,7 +317,7 @@ src/App.tsx
 - 화면 분리와 디자인 변경을 동시에 하지 않는다.
 - JSX 이동 후 기능 동작을 먼저 맞춘다.
 
-## Step 9: UX/안정성 보강
+## Step 10: UX/안정성 보강
 
 | 항목 | 이유 |
 |---|---|
@@ -296,7 +327,7 @@ src/App.tsx
 | Toast 접근성 | screen reader 알림 보장 |
 | 모바일 뒤로가기 | 학생/관리자 이탈 정책 일관화 |
 
-## Step 10: 테스트 가능 함수 분리
+## Step 11: 테스트 가능 함수 분리
 
 분리 후보:
 
@@ -309,13 +340,13 @@ src/App.tsx
 | `buildResultPayload` | Firestore 저장 스키마 검증 |
 | `parseAuthClaims` | role guard 검증 |
 
-## Step 11: Production verification
+## Step 12: Production verification
 
 | 검증 | 기준 |
 |---|---|
 | local build | `npm.cmd run build` 성공 |
 | Vercel env | Preview/Production 값 분리 |
-| Firebase Rules | emulator 또는 staging 통과 |
+| Firebase Rules | 초안 파일 기준 emulator 또는 staging 통과 |
 | student smoke | 로그인, 학습, 퀴즈, 저장 |
 | admin smoke | claim 계정만 접근, 과정/문제/결과 관리 |
 | failure smoke | 권한 실패/네트워크 실패 UI |
