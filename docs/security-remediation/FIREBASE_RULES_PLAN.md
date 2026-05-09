@@ -107,10 +107,12 @@ return signedIn() && request.auth.token.admin == true;
 | 단계 | 검증 |
 |---|---|
 | Local build | `npm.cmd run build` 성공 여부 확인 |
-| Rules syntax | Firebase CLI 또는 Emulator로 rules 문법 확인 |
-| Emulator | 학생/관리자/비로그인 read/write 테스트 |
+| Rules syntax | Firebase Emulator 실행 성공 |
+| Emulator | 학생/관리자/비로그인 20개 read/write 시나리오 통과 |
 | Preview | Vercel preview URL에서 로그인/제출/관리자 접근 확인 |
 | Production | Custom Claims와 Rules 배포 후 smoke test |
+
+현재 Emulator 검증 결과와 재실행 방법은 `docs/security-remediation/FIRESTORE_RULES_EMULATOR_TEST.md`에 기록한다.
 
 ## 최소 테스트 케이스
 

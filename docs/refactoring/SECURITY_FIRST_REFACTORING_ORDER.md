@@ -222,9 +222,10 @@ src/services/progressService.ts
 
 | 파일 | 상태 |
 |---|---|
-| `firestore.rules` | deny-by-default 초안 추가 |
+| `firestore.rules` | deny-by-default 초안 추가, Emulator 20개 시나리오 통과 |
 | `firebase.json` | Firestore rules/indexes 연결 |
 | `firestore.indexes.json` | 현재 custom composite index 없음 |
+| `scripts/firestore-rules-emulator-test.mjs` | Rules 시나리오 helper 추가 |
 
 검증 포인트:
 
@@ -346,7 +347,7 @@ src/App.tsx
 |---|---|
 | local build | `npm.cmd run build` 성공 |
 | Vercel env | Preview/Production 값 분리 |
-| Firebase Rules | 초안 파일 기준 emulator 또는 staging 통과 |
+| Firebase Rules | Emulator 20개 시나리오 통과, staging 검증 필요 |
 | student smoke | 로그인, 학습, 퀴즈, 저장 |
 | admin smoke | claim 계정만 접근, 과정/문제/결과 관리 |
 | failure smoke | 권한 실패/네트워크 실패 UI |

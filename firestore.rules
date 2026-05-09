@@ -22,7 +22,9 @@ service cloud.firestore {
       // TODO(security): Replace this placeholder with the approved admin claim policy.
       // The current app still uses client-side admin state, so deploying this draft
       // before Custom Claims are configured will block admin reads/writes.
-      return signedIn() && request.auth.token.admin == true;
+      return signedIn()
+        && request.auth.token.keys().hasAny(['admin'])
+        && request.auth.token.admin == true;
     }
 
     function isOwnerUid(uid) {

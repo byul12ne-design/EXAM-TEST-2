@@ -32,7 +32,7 @@
 | 치명 | 관리자 인증값 노출 | client bundle에 비교값 포함 | Firebase Auth + Custom Claims 기반으로 전환 |
 | 치명 | 학생 공통 인증값 노출 | 모든 학생이 같은 인증값으로 로그인 | 개인별 인증 정책 또는 서버 검증으로 전환 |
 | 치명 | 허위 사번 가입/사번 도용 | 실제 직원 명부 대조 없이 사번 8자리만 확인 | server-side 사번 검증, 관리자 사전 등록, 초대코드 중 하나 적용 |
-| 치명 | 권한 없는 write 가능성 | Rules 초안은 추가됐지만 아직 배포/검증 전 | Emulator 검증 후 admin claim 정책과 함께 배포 |
+| 치명 | 권한 없는 write 가능성 | Rules 초안은 Emulator 20개 시나리오를 통과했지만 아직 production 배포 전 | admin claim 정책 확정 후 staging/production 배포 |
 | 높음 | 클라이언트 구독 게이트 한계 | 비로그인 구독은 제거됐지만 관리자/학생 판정이 아직 client state/profile 기반 | Firestore Rules와 Auth Claims로 서버 측 권한 강제 |
 | 높음 | 결과 저장 위변조 가능성 | client가 점수/답안/결과를 생성 | 서버 검증 또는 Rules 검증 강화 |
 | 보통 | Vercel env 미사용 | 환경별 설정 분리 없음 | `.env.example`, Vercel env, preview/prod 분리 |
@@ -181,7 +181,7 @@
 |---|---|
 | Vercel env | preview/prod 각각 등록 |
 | Vercel build | production build 성공, chunk warning 기록 |
-| Firebase Rules | 초안 파일은 저장소에 추가됨. emulator 또는 staging project 검증 필요 |
+| Firebase Rules | 초안 파일은 저장소에 추가됐고 Emulator 20개 시나리오 통과. staging project 검증 필요 |
 | 관리자 로그인 | admin claim 계정만 접근 |
 | 학생 로그인 | 본인 데이터만 접근 |
 | 결과 저장 | 권한/스키마 검증 |
