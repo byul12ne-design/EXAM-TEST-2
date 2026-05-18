@@ -1,4 +1,3 @@
-{학습모드조건 ? (
 import type { Exam, Question } from './types';
 
 interface QuizRoomProps {
