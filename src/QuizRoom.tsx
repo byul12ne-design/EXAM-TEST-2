@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+{학습모드조건 ? (
 import type { Exam, Question } from './types';
 
 interface QuizRoomProps {
@@ -168,15 +168,14 @@ export default function QuizRoom({
           )}
         </div>
 
-        {currentExam?.mode === 'study' ? (
-          questionQueue.length > 0 ? (
-            <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-xl border border-slate-100 space-y-8">
-              <h2 className="text-2xl font-black leading-tight text-slate-800">{questionQueue[0].q.text}</h2>
-              <div className="grid gap-4">
-                {questionQueue[0].q.options.map((opt, i) => (
-                  <button key={i} onClick={() => handleStudyOptionClick(i)} className={`text-left p-6 rounded-2xl border-2 font-black transition-all ${isAnswerChecked ? (i === questionQueue[0].q.answerIndex ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : (i === currentSelectedOption ? 'border-red-500 bg-red-50 text-red-600 shadow-inner' : 'opacity-30 border-slate-50')) : 'hover:border-blue-400 hover:bg-blue-50 border-slate-100'}`}>
-                    {opt}
-                  </button>
+       {currentExam?.mode === 'study' && questionQueue.length > 0 && (
+          <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-xl border border-slate-100 space-y-8">
+            <h2 className="text-2xl font-black leading-tight text-slate-800">{questionQueue[0].q.text}</h2>
+            <div className="grid gap-4">
+              {questionQueue[0].q.options.map((opt, i) => (
+                <button key={i} onClick={() => handleStudyOptionClick(i)} className={`text-left p-6 rounded-2xl border-2 font-black transition-all ${isAnswerChecked ? (i === questionQueue[0].q.answerIndex ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : (i === currentSelectedOption ? 'border-red-500 bg-red-50 text-red-600 shadow-inner' : 'opacity-30 border-slate-50')) : 'hover:border-blue-400 hover:bg-blue-50 border-slate-100'}`}>
+                  {opt}
+                </button>
               ))}
             </div>
             {isAnswerChecked && (
