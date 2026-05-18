@@ -1,4 +1,5 @@
 import type { Exam, Question } from './types';
+import { useState, useEffect } from 'react';
 
 interface QuizRoomProps {
   view: string;
