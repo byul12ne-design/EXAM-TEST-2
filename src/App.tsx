@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   signInWithEmailAndPassword, createUserWithEmailAndPassword, 
   getIdTokenResult, onAuthStateChanged, signOut, type User
@@ -8,6 +8,9 @@ import {
   doc, setDoc, getDoc, writeBatch, query, where 
 } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
+import QuizAdmin from './QuizAdmin';
+import QuizRoom from './QuizRoom';
+import type { Exam, Question, BankQuestion, ExamResult, UserProfile } from './types';
 
 // ==========================================
 // 🛠️ 앱 설정 및 파이어베이스
@@ -17,12 +20,6 @@ const APP_CONFIG = {
   logoImageUrl: "https://eshop.wuerth.de/is-bin/intershop.static/WFS/1401-B1-Site/-/en_US/webkit_bootstrap/dist/img/wuerth-logo.svg",
 };
 
-// --- 인터페이스 ---
-interface Question { category?: string; text: string; options: string[]; answerIndex: number; explanation: string; }
-interface BankQuestion extends Question { id: string; createdAt: number; }
-interface Exam { id: string; title: string; notice?: string; questions: Question[]; displayCount: number; createdAt: number; mode: 'study' | 'test'; isVisible: boolean; }
-interface ExamResult { id: string; examId: string; examTitle: string; studentId: string; studentName: string; score: number; correctCount: number; totalCount: number; answers: Record<number, number>; activeQuestions: Question[]; createdAt: number; mode: 'study' | 'test'; }
-interface UserProfile { uid: string; employeeId: string; name: string; role: 'student' | 'admin'; }
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -62,6 +59,13 @@ export default function App() {
   const [newExamMode, setNewExamMode] = useState<'study' | 'test'>('study');
   const [displayCount, setDisplayCount] = useState('');
   const [newQuestions, setNewQuestions] = useState<Question[]>([{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState('0');
+  const [maxAttempts, setMaxAttempts] = useState('0');
+  const [warnOnExit, setWarnOnExit] = useState(false);
+  const [exitPolicy, setExitPolicy] = useState<'continue' | 'forfeit'>('continue');
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [timeUpModalOpen, setTimeUpModalOpen] = useState(false);
+  const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
 
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
@@ -318,6 +322,14 @@ export default function App() {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
 
+    const exitStorageKey = getExitPolicyStorageKey(currentExamId);
+    if (exam.exitPolicy === 'forfeit' && localStorage.getItem(exitStorageKey) === 'left') {
+      window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
+      clearExitPolicyStorage(currentExamId);
+      await submitExam({});
+      return;
+    }
+
     if (exam.mode === 'study') {
       const spDoc = await getDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`));
       if (spDoc.exists() && spDoc.data().queue && spDoc.data().queue.length > 0) {
@@ -392,9 +404,96 @@ export default function App() {
     if (userProfile) await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), { answers: nextAnswers }, { merge: true });
   };
 
+  const handleStudyOptionClick = (index: number) => {
+    if (!isAnswerChecked) {
+      setCurrentSelectedOption(index);
+      setIsAnswerChecked(true);
+    }
+  };
+
+  const getTimerStorageKey = (examId: string) => `quizTimer_${userProfile?.uid || 'guest'}_${examId}`;
+  const getExitPolicyStorageKey = (examId: string) => `quizExitPolicy_${userProfile?.uid || 'guest'}_${examId}`;
+
+  const clearTimerStorage = (examId: string) => {
+    if (!userProfile) return;
+    localStorage.removeItem(getTimerStorageKey(examId));
+    setRemainingSeconds(0);
+    setIsAutoSubmitting(false);
+  };
+
+  const clearExitPolicyStorage = (examId: string) => {
+    localStorage.removeItem(getExitPolicyStorageKey(examId));
+  };
+
+  const handleAutoSubmit = useCallback(async () => {
+    if (isAutoSubmitting || !userProfile) return;
+    setIsAutoSubmitting(true);
+    const exam = exams.find(e => e.id === currentExamId);
+    if (!exam) return;
+
+    const finalAnswers = exam.mode === 'test' ? testAnswers : firstAttemptAnswers;
+    setTimeUpModalOpen(true);
+    await submitExam(finalAnswers);
+  }, [isAutoSubmitting, userProfile, exams, currentExamId, testAnswers, firstAttemptAnswers, submitExam]);
+
+  useEffect(() => {
+    if (view !== 'student-take' || !currentExamId || !userProfile) return;
+    const exam = exams.find(e => e.id === currentExamId);
+    if (!exam || !exam.timeLimitMinutes || exam.timeLimitMinutes <= 0) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const storageKey = getTimerStorageKey(currentExamId);
+    let endAt: number | null = null;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed?.examId === currentExamId && typeof parsed.endAt === 'number') {
+          endAt = parsed.endAt;
+        }
+      } catch (e) {
+        console.warn('timer restore failed', e);
+      }
+    }
+
+    const now = Date.now();
+    if (endAt && endAt <= now) {
+      setRemainingSeconds(0);
+      handleAutoSubmit();
+      return;
+    }
+
+    if (!endAt) {
+      endAt = now + exam.timeLimitMinutes * 60000;
+      localStorage.setItem(storageKey, JSON.stringify({ examId: currentExamId, endAt }));
+    }
+
+    const updateRemaining = () => {
+      const now = Date.now();
+      const seconds = Math.max(0, Math.ceil(((endAt as number) - now) / 1000));
+      setRemainingSeconds(seconds);
+      if (seconds <= 0) {
+        handleAutoSubmit();
+      }
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 500);
+    return () => window.clearInterval(interval);
+  }, [view, currentExamId, userProfile, exams, handleAutoSubmit]);
+
   const handleMobileBack = async () => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam) { setView('home'); return; }
+
+    if (exam.exitPolicy === 'forfeit') {
+      window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
+      await submitExam({});
+      return;
+    }
+
     const shouldLeave = window.confirm('현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
     if (!shouldLeave) return;
 
@@ -420,21 +519,58 @@ export default function App() {
     setView('home');
   };
 
-  const submitExam = async (finalAnswers: Record<number, number>) => {
+  async function submitExam(finalAnswers: Record<number, number>) {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
 
-    const correctCount = activeQuestions.reduce((cnt, q, idx) => finalAnswers[idx] === q.answerIndex ? cnt + 1 : cnt, 0);
-    const score = activeQuestions.length > 0 ? Math.round((correctCount / activeQuestions.length) * 100) : 0;
+    const questionsForResult = activeQuestions.length > 0
+      ? activeQuestions
+      : exam.questions.slice(0, exam.displayCount || exam.questions.length);
+
+    const correctCount = questionsForResult.reduce((cnt, q, idx) => finalAnswers[idx] === q.answerIndex ? cnt + 1 : cnt, 0);
+    const score = questionsForResult.length > 0 ? Math.round((correctCount / questionsForResult.length) * 100) : 0;
     setStudentScore(score);
 
-    const resultData = { examId: currentExamId, examTitle: exam.title, studentId: userProfile.employeeId, studentName: userProfile.name, score, correctCount, totalCount: activeQuestions.length, answers: finalAnswers, activeQuestions, createdAt: Date.now(), mode: exam.mode };
+    const resultData = {
+      examId: currentExamId,
+      examTitle: exam.title,
+      studentId: userProfile.employeeId,
+      studentName: userProfile.name,
+      score,
+      correctCount,
+      totalCount: questionsForResult.length,
+      answers: finalAnswers,
+      activeQuestions: questionsForResult,
+      createdAt: Date.now(),
+      mode: exam.mode,
+    };
+
     try {
       const docRef = await addDoc(collection(db, 'results'), resultData);
       setLastResult({ id: docRef.id, ...resultData });
       if (exam.mode === 'test') await deleteDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
-    } catch(e) { console.error("결과 저장 오류"); }
+      if (exam.mode === 'study') await deleteDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`));
+      clearTimerStorage(currentExamId);
+      clearExitPolicyStorage(currentExamId);
+    } catch(e) { console.error("결과 저장 오류", e); }
     setView('student-result');
+  }
+
+  const handleLogoClick = async () => {
+    const exam = exams.find(e => e.id === currentExamId);
+    if (view === 'student-take' && exam) {
+      const isForfeit = exam.exitPolicy === 'forfeit';
+      const msg = isForfeit ? '지금 화면을 벗어나면 응시 기회가 박탈됩니다. 정말 나가시겠습니까?' : '시험을 떠나시겠습니까?';
+      const ok = window.confirm(msg);
+      if (!ok) return;
+      if (isForfeit) {
+        // Ensure immediate submission/penalty when user explicitly confirms leaving
+        await submitExam({});
+      }
+      setView('home');
+      return;
+    }
+    setView('home');
   };
 
   const handleSaveExam = async () => {
@@ -444,7 +580,19 @@ export default function App() {
     const finalId = customExamId.trim().replace(/\s+/g, '-') || editingExamId || undefined;
     
     // 💡 저장 시 notice(안내사항) 필드 포함
-    const examData = { title: newExamTitle, notice: newExamNotice, mode: newExamMode, questions: cleaned, displayCount: parseInt(displayCount) || cleaned.length, isVisible: false, createdAt: Date.now() };
+    const examData = {
+      title: newExamTitle,
+      notice: newExamNotice,
+      mode: newExamMode,
+      questions: cleaned,
+      displayCount: parseInt(displayCount) || cleaned.length,
+      timeLimitMinutes: parseInt(timeLimitMinutes) || 0,
+      maxAttempts: parseInt(maxAttempts) || 0,
+      warnOnExit,
+      exitPolicy,
+      isVisible: false,
+      createdAt: Date.now()
+    };
     
     try {
       if (editingExamId) {
@@ -483,6 +631,11 @@ export default function App() {
   const filteredResults = useMemo(() => results.filter(r => resultFilterExamId === 'all' || r.examId === resultFilterExamId), [results, resultFilterExamId]);
   const resultExamOptions = useMemo(() => Array.from(new Map(results.map(r => [r.examId, r.examTitle])).entries()), [results]);
 
+  const currentExam = exams.find(e => e.id === currentExamId);
+  const currentExamAttemptCount = results.filter(r => r.examId === currentExamId).length;
+  const currentExamMaxAttempts = currentExam?.maxAttempts || 0;
+  const isAttemptLimitExceeded = currentExamMaxAttempts > 0 && currentExamAttemptCount >= currentExamMaxAttempts;
+
   const handleExportCSV = () => {
     if (filteredResults.length === 0) return showToast('데이터가 없습니다.');
     const headers = ['응시일시', '시험/학습명', '유형', '사번', '이름', '점수(점)'];
@@ -505,7 +658,7 @@ export default function App() {
       `}</style>
 
       <nav className="w-full p-4 bg-white shadow-sm border-b flex justify-between items-center sticky top-0 z-50">
-        <h1 onClick={() => setView('home')} className="cursor-pointer flex items-center gap-2 ml-4">
+        <h1 onClick={handleLogoClick} className="cursor-pointer flex items-center gap-2 ml-4">
           <img src={APP_CONFIG.logoImageUrl} alt="Logo" className="h-8" />
           <span className="font-bold text-slate-800 hidden sm:block">{APP_CONFIG.logoText}</span>
         </h1>
@@ -588,7 +741,8 @@ export default function App() {
             {adminTab === 'exams' && (
               <div className="space-y-6">
                 <button onClick={() => { 
-                  setEditingExamId(null); setCustomExamId(''); setNewExamTitle(''); setNewExamNotice(''); setDisplayCount(''); 
+                  setEditingExamId(null); setCustomExamId(''); setNewExamTitle(''); setNewExamNotice(''); setDisplayCount(''); setTimeLimitMinutes('0'); setMaxAttempts('0');
+                  setWarnOnExit(false); setExitPolicy('continue');
                   setNewQuestions([{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]); setView('admin-create'); 
                 }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-slate-800">➕ 새 과정 만들기</button>
                 <div className="bg-white p-6 rounded-[2rem] border shadow-sm grid gap-4">
@@ -606,6 +760,8 @@ export default function App() {
                           setEditingExamId(ex.id); setCustomExamId(ex.id); setNewExamTitle(ex.title); 
                           setNewExamNotice(ex.notice || ''); // 수정 시 안내사항 불러오기
                           setNewExamMode(ex.mode); setDisplayCount(ex.displayCount?.toString() || ''); 
+                          setTimeLimitMinutes((ex.timeLimitMinutes || 0).toString()); setMaxAttempts((ex.maxAttempts || 0).toString());
+                          setWarnOnExit(ex.warnOnExit || false); setExitPolicy(ex.exitPolicy || 'continue');
                           setNewQuestions(ex.questions?.length ? ex.questions : [{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]); 
                           setView('admin-create'); 
                         }} className="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-xl text-xs font-black text-slate-700">✏️ 수정</button>
@@ -731,199 +887,73 @@ export default function App() {
           </div>
         )}
 
-        {/* [4] 과정 생성/수정 화면 */}
         {view === 'admin-create' && (
-          <div className="animate-in space-y-6 pb-20 w-full">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-b border-slate-200 pb-6">
-              <button onClick={() => setView('admin-dash')} className="text-3xl hover:bg-white p-2 rounded-full transition-colors shrink-0">⬅️</button>
-              <div className="flex-1 w-full flex flex-col gap-1">
-                 <input value={newExamTitle} onChange={e => setNewExamTitle(e.target.value)} className="w-full text-2xl sm:text-3xl font-black outline-none bg-transparent focus:border-blue-500 transition-all text-slate-800" placeholder="학습 또는 퀴즈 제목 입력"/>
-                 <div className="flex flex-wrap items-center gap-2 mt-2">
-                   <span className="text-xs font-bold text-slate-400">과정 코드:</span>
-                   <input value={customExamId} onChange={e => setCustomExamId(e.target.value)} className="text-xs font-mono bg-blue-50 text-blue-600 px-2 py-1 rounded outline-none border border-blue-100 min-w-[150px]" placeholder="(선택) 직접 지정 시 입력"/>
-                 </div>
-              </div>
-            </div>
-
-            {/* 💡 추가됨: 공지사항(안내사항) 입력란 */}
-            <div className="bg-white p-6 rounded-[2rem] border shadow-sm">
-              <span className="text-xs font-black text-slate-400 tracking-widest uppercase">📢 과정 안내사항 작성 (선택사항)</span>
-              <textarea 
-                value={newExamNotice} 
-                onChange={e => setNewExamNotice(e.target.value)} 
-                className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl text-sm font-medium outline-none focus:border-blue-400 mt-4" 
-                placeholder="참가자가 '시작하기'를 누르기 전에 읽어야 할 안내사항이나 시험 규칙을 입력하세요." 
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-4">
-              <button onClick={() => setNewExamMode('study')} className={`flex-1 py-4 rounded-xl font-black border-2 ${newExamMode === 'study' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-slate-100 text-slate-400'}`}>📖 학습 모드</button>
-              <button onClick={() => setNewExamMode('test')} className={`flex-1 py-4 rounded-xl font-black border-2 ${newExamMode === 'test' ? 'border-purple-500 bg-purple-50 text-purple-600' : 'border-slate-100 text-slate-400'}`}>🏆 실전 퀴즈 모드</button>
-            </div>
-
-            <div className="bg-white p-6 rounded-[2rem] border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h5 className="font-bold text-slate-700">🔀 랜덤 출제 문항 수 제한</h5>
-                <p className="text-[10px] text-slate-500 mt-1">입력한 수만큼 아래 목록에서 무작위 출제됩니다. (비워두면 등록된 전체 출제)</p>
-              </div>
-              <input type="number" value={displayCount} onChange={e => setDisplayCount(e.target.value)} className="w-24 p-3 rounded-xl border-2 bg-slate-50 text-center outline-none focus:border-blue-500 text-slate-800 font-bold" placeholder="전체"/>
-            </div>
-
-            <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center border-b border-slate-100 pb-4 gap-4">
-                <span className="font-black text-lg text-slate-800">📝 문제 세팅 (총 {newQuestions.length}문항)</span>
-                <div className="flex flex-wrap gap-2">
-                  <label className="text-xs bg-emerald-600 text-white px-3 py-2 rounded-xl font-bold hover:bg-emerald-700 cursor-pointer shadow-sm flex items-center gap-1">
-                     📊 엑셀 대량 업로드<input type="file" accept=".csv" className="hidden" onChange={handleExamFileUpload} />
-                  </label>
-                  <button onClick={() => setIsBankModalOpen(true)} className="text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded-xl font-bold hover:bg-blue-200">🗃️ 저장고 불러오기</button>
-                  <button onClick={() => setNewQuestions([...newQuestions, { text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }])} className="text-xs bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold hover:bg-slate-200">+ 수동 문항 추가</button>
-                </div>
-              </div>
-              
-              <div className="space-y-6 pt-2">
-                {newQuestions.map((q, i) => (
-                  <div key={i} className="bg-slate-50 p-6 rounded-[2rem] border relative">
-                    <span className="text-sm font-black text-blue-500 mb-4 block">Q{i+1}.</span>
-                    <textarea value={q?.text || ''} onChange={e => { const n = [...newQuestions]; n[i].text = e.target.value; setNewQuestions(n); }} className="w-full bg-white border-2 p-4 rounded-2xl font-bold mb-4 outline-none focus:border-blue-400" placeholder="문제 내용을 입력하세요" rows={2}/>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                      {q?.options?.map((opt, oi) => (
-                        <div key={oi} className={`flex items-center gap-3 border-2 p-3 rounded-2xl bg-white ${q.answerIndex === oi ? 'border-emerald-400' : 'border-slate-100'}`}>
-                          <input type="radio" checked={q.answerIndex === oi} onChange={() => { const n = [...newQuestions]; n[i].answerIndex = oi; setNewQuestions(n); }} className="w-5 h-5 accent-emerald-500 cursor-pointer"/>
-                          <input value={opt || ''} onChange={e => { const n = [...newQuestions]; n[i].options[oi] = e.target.value; setNewQuestions(n); }} className="w-full bg-transparent outline-none font-medium text-sm" placeholder={`보기 ${oi+1}`} />
-                        </div>
-                      ))}
-                    </div>
-                    <textarea value={q?.explanation || ''} onChange={e => { const n = [...newQuestions]; n[i].explanation = e.target.value; setNewQuestions(n); }} className="w-full bg-white border p-4 rounded-2xl text-sm font-medium outline-none focus:border-blue-400" placeholder="💡 문제 해설을 입력하세요 (제출 후 오답노트에서 보여집니다)" rows={2}/>
-                    <button onClick={() => setNewQuestions(newQuestions.filter((_, idx) => idx !== i))} className="absolute top-6 right-6 bg-red-100 text-red-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-200">삭제</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <button onClick={handleSaveExam} className="w-full bg-slate-900 text-white py-6 rounded-[2.5rem] font-black text-xl shadow-2xl sticky bottom-6 z-20 hover:bg-slate-800 transition-colors">과정 저장하기</button>
-          </div>
+          <QuizAdmin
+            exams={exams}
+            editingExamId={editingExamId}
+            customExamId={customExamId}
+            newExamTitle={newExamTitle}
+            newExamNotice={newExamNotice}
+            newExamMode={newExamMode}
+            displayCount={displayCount}
+            timeLimitMinutes={timeLimitMinutes}
+            maxAttempts={maxAttempts}
+            warnOnExit={warnOnExit}
+            exitPolicy={exitPolicy}
+            newQuestions={newQuestions}
+            isBankModalOpen={isBankModalOpen}
+            selectedBankIds={selectedBankIds}
+            bankCategoryFilter={bankCategoryFilter}
+            editingBankId={editingBankId}
+            newBankQuestion={newBankQuestion}
+            filteredBank={filteredBank}
+            bankCategories={bankCategories}
+            setView={setView}
+            setEditingExamId={setEditingExamId}
+            setCustomExamId={setCustomExamId}
+            setNewExamTitle={setNewExamTitle}
+            setNewExamNotice={setNewExamNotice}
+            setNewExamMode={setNewExamMode}
+            setDisplayCount={setDisplayCount}
+            setTimeLimitMinutes={setTimeLimitMinutes}
+            setMaxAttempts={setMaxAttempts}
+            setWarnOnExit={setWarnOnExit}
+            setExitPolicy={setExitPolicy}
+            setNewQuestions={setNewQuestions}
+            setIsBankModalOpen={setIsBankModalOpen}
+            setSelectedBankIds={setSelectedBankIds}
+            setBankCategoryFilter={setBankCategoryFilter}
+            setEditingBankId={setEditingBankId}
+            setNewBankQuestion={setNewBankQuestion}
+            handleBankFileUpload={handleBankFileUpload}
+            handleExamFileUpload={handleExamFileUpload}
+            handleSaveExam={handleSaveExam}
+            handleSaveBankQuestion={handleSaveBankQuestion}
+          />
         )}
 
-        {/* 저장고에서 불러오기 모달 */}
-        {isBankModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in">
-            <div className="bg-white rounded-[2rem] p-6 sm:p-8 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
-              <div className="flex justify-between items-center mb-6 border-b pb-4 shrink-0">
-                <h3 className="text-xl sm:text-2xl font-black text-slate-800">🗃️ 저장고에서 불러오기</h3>
-                <button onClick={() => {setIsBankModalOpen(false); setSelectedBankIds([]);}} className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center font-bold">✕</button>
-              </div>
-              <div className="overflow-y-auto flex-1 mb-6 space-y-3">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-sm font-bold text-slate-600">분류 필터:</span>
-                  <select value={bankCategoryFilter} onChange={e => setBankCategoryFilter(e.target.value)} className="p-2 rounded-xl border outline-none font-bold text-sm bg-white flex-1 sm:w-40 cursor-pointer">
-                    <option value="all">전체보기</option>
-                    {Array.from(new Set(questionBank.map(q => q.category || '미분류'))).map(c => <option key={c as string} value={c as string}>{c as string}</option>)}
-                  </select>
-                </div>
-                {questionBank.filter(q => bankCategoryFilter === 'all' || q.category === bankCategoryFilter).length > 0 && (
-                  <label className="flex items-center gap-3 p-3 bg-slate-100 rounded-xl cursor-pointer w-fit pr-5 mb-2 hover:bg-slate-200">
-                    <input type="checkbox" className="w-5 h-5 accent-blue-600 cursor-pointer" 
-                      checked={questionBank.filter(q => bankCategoryFilter === 'all' || q.category === bankCategoryFilter).every(q => selectedBankIds.includes(q.id))} 
-                      onChange={e => {
-                        const filteredIds = questionBank.filter(q => bankCategoryFilter === 'all' || q.category === bankCategoryFilter).map(q => q.id);
-                        if (e.target.checked) setSelectedBankIds(Array.from(new Set([...selectedBankIds, ...filteredIds])));
-                        else setSelectedBankIds(selectedBankIds.filter(id => !filteredIds.includes(id)));
-                      }}/>
-                    <span className="text-sm font-bold text-slate-800">현재 목록 전체 선택</span>
-                  </label>
-                )}
-                {questionBank.filter(q => bankCategoryFilter === 'all' || q.category === bankCategoryFilter).map(q => (
-                  <label key={q.id} className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-colors ${selectedBankIds.includes(q.id) ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-blue-200 bg-white'}`}>
-                    <input type="checkbox" checked={selectedBankIds.includes(q.id)} onChange={e => { if(e.target.checked) setSelectedBankIds([...selectedBankIds, q.id]); else setSelectedBankIds(selectedBankIds.filter(id => id !== q.id)); }} className="w-5 h-5 cursor-pointer accent-blue-600 mt-1" />
-                    <div>
-                      <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold mb-1 block w-fit">{q?.category || '미분류'}</span>
-                      <p className="font-bold text-sm text-slate-800">{q?.text}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <button onClick={() => {
-                const selected = questionBank.filter(q => selectedBankIds.includes(q.id)).map(({ id, createdAt, ...rest }) => rest);
-                const existing = newQuestions.filter(q => q.text.trim() !== '');
-                setNewQuestions([...existing, ...selected]); setIsBankModalOpen(false); setSelectedBankIds([]);
-                showToast(`${selected.length}개 추가됨!`);
-              }} disabled={selectedBankIds.length === 0} className={`w-full py-4 rounded-xl font-bold text-white shrink-0 ${selectedBankIds.length > 0 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300'}`}>선택한 {selectedBankIds.length}개 세트에 추가</button>
-            </div>
-          </div>
-        )}
-
-        {/* [5] 학생: 안내사항 대기 화면 */}
-        {view === 'student-entry' && (
-          <div className="py-10 sm:py-20 text-center animate-in w-full flex flex-col items-center max-w-2xl mx-auto">
-            <h2 className="text-4xl font-black mb-8 tracking-tight text-slate-800">{exams.find(e => e.id === currentExamId)?.title}</h2>
-            
-            {/* 💡 추가됨: 작성된 공지사항이 있으면 예쁜 박스 형태로 노출 */}
-            {exams.find(e => e.id === currentExamId)?.notice && (
-              <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-100 shadow-sm mb-10 w-full text-left whitespace-pre-wrap text-slate-600 leading-relaxed font-medium">
-                {exams.find(e => e.id === currentExamId)?.notice}
-              </div>
-            )}
-            
-            <button onClick={startExam} className="bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all">과정 시작하기 👉</button>
-          </div>
-        )}
-
-        {view === 'student-take' && (
-          <div className="max-w-2xl mx-auto w-full animate-in pb-20">
-            <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-               <button onClick={handleMobileBack} className="md:hidden inline-flex items-center gap-2 text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-2xl font-bold shadow-sm">
-                 <span className="text-lg">←</span> 뒤로
-               </button>
-               <button onClick={() => setView('home')} className="hidden md:inline-flex text-slate-600 font-bold hover:text-blue-600 flex items-center gap-2">
-                 <span>⬅️</span> 나가기
-               </button>
-               {exams.find(e => e.id === currentExamId)?.mode === 'study' ? (
-                  <div className="font-bold text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
-                    남은 문제: <span className="text-blue-600">{questionQueue.length}</span>개
-                  </div>
-               ) : (
-                  <div className="font-bold text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
-                    총 <span className="text-purple-600">{activeQuestions.length}</span> 문항
-                  </div>
-               )}
-            </div>
-
-            {exams.find(e => e.id === currentExamId)?.mode === 'study' && questionQueue.length > 0 && (
-               <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-xl border border-slate-100 space-y-8">
-                 <h2 className="text-2xl font-black leading-tight text-slate-800">{questionQueue[0].q.text}</h2>
-                 <div className="grid gap-4">
-                   {questionQueue[0].q.options.map((opt, i) => (
-                     <button key={i} onClick={() => { if(!isAnswerChecked) { setCurrentSelectedOption(i); setIsAnswerChecked(true); } }} className={`text-left p-6 rounded-2xl border-2 font-black transition-all ${isAnswerChecked ? (i === questionQueue[0].q.answerIndex ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : (i === currentSelectedOption ? 'border-red-500 bg-red-50 text-red-600 shadow-inner' : 'opacity-30 border-slate-50')) : 'hover:border-blue-400 hover:bg-blue-50 border-slate-100'}`}>
-                       {opt}
-                     </button>
-                   ))}
-                 </div>
-                 {isAnswerChecked && (
-                   <div className="space-y-4 animate-in">
-                     {questionQueue[0].q.explanation && <div className="p-5 bg-slate-50 rounded-2xl border text-sm text-slate-600 leading-relaxed font-medium">💡 해설: {questionQueue[0].q.explanation}</div>}
-                     <button onClick={handleStudyNextQuestion} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">다음 문제로</button>
-                   </div>
-                 )}
-               </div>
-            )}
-            
-            {exams.find(e => e.id === currentExamId)?.mode === 'test' && (
-              <div className="space-y-6">
-                {activeQuestions.map((q, idx) => (
-                  <div key={idx} className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6">
-                    <p className="font-black text-lg text-slate-800 leading-snug"><span className="text-blue-500 mr-2">Q{idx+1}.</span>{q.text}</p>
-                    <div className="grid gap-3">
-                      {q.options.map((opt, oi) => (
-                        <button key={oi} onClick={() => handleTestOptionClick(idx, oi)} className={`p-5 rounded-2xl border-2 text-left font-bold transition-all ${testAnswers[idx] === oi ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-50 hover:bg-slate-50'}`}>{opt}</button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <button onClick={() => submitExam(testAnswers)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl active:scale-95 transition-all">전체 답안 제출하기</button>
-              </div>
-            )}
-          </div>
+        {(view === 'student-entry' || view === 'student-take') && (
+          <QuizRoom
+            view={view}
+            currentExamId={currentExamId}
+            currentExam={currentExam}
+            currentExamAttemptCount={currentExamAttemptCount}
+            currentExamMaxAttempts={currentExamMaxAttempts}
+            isAttemptLimitExceeded={isAttemptLimitExceeded}
+            startExam={startExam}
+            remainingSeconds={remainingSeconds}
+            timeUpModalOpen={timeUpModalOpen}
+            handleMobileBack={handleMobileBack}
+            activeQuestions={activeQuestions}
+            questionQueue={questionQueue}
+            currentSelectedOption={currentSelectedOption}
+            isAnswerChecked={isAnswerChecked}
+            testAnswers={testAnswers}
+            handleStudyNextQuestion={handleStudyNextQuestion}
+            handleStudyOptionClick={handleStudyOptionClick}
+            handleTestOptionClick={handleTestOptionClick}
+            submitExam={submitExam}
+          />
         )}
 
         {(view === 'student-result' || selectedResultDetail) && (
@@ -931,6 +961,11 @@ export default function App() {
             <div className="text-center mb-10">
               {view === 'student-result' && <h2 className="text-4xl font-black text-slate-800 mb-6">수고하셨습니다!</h2>}
               {selectedResultDetail && <h2 className="text-2xl font-black text-slate-800 mb-4">{selectedResultDetail.studentName}님의 결과지</h2>}
+              {timeUpModalOpen && !selectedResultDetail && (
+                <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-3xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg">
+                  ⏰ Time is up! Automatically submitted.
+                </div>
+              )}
               <div className="text-7xl font-black text-blue-600 drop-shadow-md">{selectedResultDetail ? selectedResultDetail.score : studentScore}<span className="text-3xl text-slate-400 ml-2">점</span></div>
             </div>
 
