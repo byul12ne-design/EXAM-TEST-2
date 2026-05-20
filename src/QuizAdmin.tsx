@@ -1,6 +1,4 @@
 import React from 'react';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
 import type { Exam, Question, BankQuestion } from './types';
 
 interface QuizAdminProps {
@@ -13,6 +11,7 @@ interface QuizAdminProps {
   displayCount: string;
   timeLimitMinutes: string;
   maxAttempts: string;
+  isShuffleEnabled: boolean;
   warnOnExit: boolean;
   exitPolicy: 'continue' | 'forfeit';
   newQuestions: Question[];
@@ -32,6 +31,7 @@ interface QuizAdminProps {
   setDisplayCount: React.Dispatch<React.SetStateAction<string>>;
   setTimeLimitMinutes: React.Dispatch<React.SetStateAction<string>>;
   setMaxAttempts: React.Dispatch<React.SetStateAction<string>>;
+  setIsShuffleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   setNewQuestions: React.Dispatch<React.SetStateAction<Question[]>>;
   setIsBankModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setSelectedBankIds: React.Dispatch<React.SetStateAction<string[]>>;
@@ -47,8 +47,6 @@ interface QuizAdminProps {
 }
 
 export default function QuizAdmin({
-  exams,
-  editingExamId,
   customExamId,
   newExamTitle,
   newExamNotice,
@@ -56,16 +54,14 @@ export default function QuizAdmin({
   displayCount,
   timeLimitMinutes,
   maxAttempts,
+  isShuffleEnabled,
   newQuestions,
   isBankModalOpen,
   selectedBankIds,
   bankCategoryFilter,
-  editingBankId,
-  newBankQuestion,
   filteredBank,
   bankCategories,
   setView,
-  setEditingExamId,
   setCustomExamId,
   setNewExamTitle,
   setNewExamNotice,
@@ -73,20 +69,17 @@ export default function QuizAdmin({
   setDisplayCount,
   setTimeLimitMinutes,
   setMaxAttempts,
+  setIsShuffleEnabled,
   setNewQuestions,
   setIsBankModalOpen,
   setSelectedBankIds,
   setBankCategoryFilter,
-  setEditingBankId,
-  setNewBankQuestion,
   warnOnExit,
   exitPolicy,
   setWarnOnExit,
   setExitPolicy,
-  handleBankFileUpload,
   handleExamFileUpload,
   handleSaveExam,
-  handleSaveBankQuestion,
 }: QuizAdminProps) {
   return (
     <div className="animate-in space-y-6 pb-20 w-full">
@@ -125,7 +118,7 @@ export default function QuizAdmin({
         <input type="number" value={displayCount} onChange={e => setDisplayCount(e.target.value)} className="w-24 p-3 rounded-xl border-2 bg-slate-50 text-center outline-none focus:border-blue-500 text-slate-800 font-bold" placeholder="전체" />
       </div>
 
-      <div className="bg-white p-6 rounded-[2rem] border shadow-sm grid gap-4 sm:grid-cols-2">
+      <div className="bg-white p-6 rounded-[2rem] border shadow-sm grid gap-4 lg:grid-cols-3">
         <div>
           <h5 className="font-bold text-slate-700">⏱️ 제한 시간</h5>
           <p className="text-[10px] text-slate-500 mt-1">퀴즈 응시 중 타이머를 활성화합니다.</p>
@@ -149,6 +142,18 @@ export default function QuizAdmin({
             <option value="3">3 Times</option>
             <option value="5">5 Times</option>
           </select>
+        </div>
+        <div>
+          <h5 className="font-bold text-slate-700">🔀 문제 순서 섞기</h5>
+          <p className="text-[10px] text-slate-500 mt-1">평가용 퀴즈는 동일한 순서로 풀어야 할 때 OFF로 설정하세요.</p>
+          <label className="inline-flex items-center gap-3 mt-3 cursor-pointer">
+            <span className="relative">
+              <input type="checkbox" checked={isShuffleEnabled} onChange={e => setIsShuffleEnabled(e.target.checked)} className="sr-only" />
+              <span className={`block w-14 h-8 rounded-full transition-colors ${isShuffleEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+              <span className={`absolute left-1 top-1 w-6 h-6 rounded-full bg-white shadow transform transition-transform ${isShuffleEnabled ? 'translate-x-6' : 'translate-x-0'}`}></span>
+            </span>
+            <span className="text-sm font-bold text-slate-700">{isShuffleEnabled ? 'On' : 'Off'}</span>
+          </label>
         </div>
       </div>
 

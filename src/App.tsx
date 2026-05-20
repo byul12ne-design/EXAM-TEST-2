@@ -66,6 +66,7 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [timeUpModalOpen, setTimeUpModalOpen] = useState(false);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
+  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
 
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [leaveConfirmTitle, setLeaveConfirmTitle] = useState('');
@@ -380,7 +381,7 @@ export default function App() {
 
     const pool = exam.questions || [];
     const displayCnt = exam.displayCount || pool.length;
-    const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, displayCnt);
+    const selected = exam.isShuffleEnabled ? [...pool].sort(() => Math.random() - 0.5).slice(0, displayCnt) : pool.slice(0, displayCnt);
     
     setActiveQuestions(selected);
     setFirstAttemptAnswers({});
@@ -649,6 +650,7 @@ export default function App() {
       maxAttempts: parseInt(maxAttempts) || 0,
       warnOnExit,
       exitPolicy,
+      isShuffleEnabled,
       isVisible: false,
       createdAt: Date.now()
     };
@@ -798,7 +800,7 @@ export default function App() {
             {adminTab === 'exams' && (
               <div className="space-y-6">
                 <button onClick={() => { 
-                  setEditingExamId(null); setCustomExamId(''); setNewExamTitle(''); setNewExamNotice(''); setDisplayCount(''); setTimeLimitMinutes('0'); setMaxAttempts('0');
+                  setEditingExamId(null); setCustomExamId(''); setNewExamTitle(''); setNewExamNotice(''); setDisplayCount(''); setTimeLimitMinutes('0'); setMaxAttempts('0'); setIsShuffleEnabled(false);
                   setWarnOnExit(false); setExitPolicy('continue');
                   setNewQuestions([{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]); setView('admin-create'); 
                 }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-slate-800">➕ 새 과정 만들기</button>
@@ -819,6 +821,7 @@ export default function App() {
                           setNewExamMode(ex.mode); setDisplayCount(ex.displayCount?.toString() || ''); 
                           setTimeLimitMinutes((ex.timeLimitMinutes || 0).toString()); setMaxAttempts((ex.maxAttempts || 0).toString());
                           setWarnOnExit(ex.warnOnExit || false); setExitPolicy(ex.exitPolicy || 'continue');
+                          setIsShuffleEnabled(ex.isShuffleEnabled || false);
                           setNewQuestions(ex.questions?.length ? ex.questions : [{ category: '', text: '', options: ['', '', '', ''], answerIndex: 0, explanation: '' }]); 
                           setView('admin-create'); 
                         }} className="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-xl text-xs font-black text-slate-700">✏️ 수정</button>
@@ -958,6 +961,7 @@ export default function App() {
             warnOnExit={warnOnExit}
             exitPolicy={exitPolicy}
             newQuestions={newQuestions}
+            isShuffleEnabled={isShuffleEnabled}
             isBankModalOpen={isBankModalOpen}
             selectedBankIds={selectedBankIds}
             bankCategoryFilter={bankCategoryFilter}
@@ -974,6 +978,7 @@ export default function App() {
             setDisplayCount={setDisplayCount}
             setTimeLimitMinutes={setTimeLimitMinutes}
             setMaxAttempts={setMaxAttempts}
+            setIsShuffleEnabled={setIsShuffleEnabled}
             setWarnOnExit={setWarnOnExit}
             setExitPolicy={setExitPolicy}
             setNewQuestions={setNewQuestions}

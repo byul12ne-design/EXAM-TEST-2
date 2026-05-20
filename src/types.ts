@@ -24,6 +24,7 @@ export interface Exam {
   maxAttempts?: number;
   warnOnExit?: boolean;
   exitPolicy?: 'continue' | 'forfeit';
+  isShuffleEnabled?: boolean;
 }
 
 export interface ExamResult {
