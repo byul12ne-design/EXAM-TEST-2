@@ -129,7 +129,7 @@ export default function QuizRoom({
           </div>
         )}
 
-        <button type="button" onClick={startExam} disabled={isAttemptLimitExceeded} className={`bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all ${isAttemptLimitExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}>
+        <button type="button" onClick={startExam} disabled={isAttemptLimitExceeded} className={`relative z-50 bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all ${isAttemptLimitExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}>
           과정 시작하기 👉
         </button>
       </div>

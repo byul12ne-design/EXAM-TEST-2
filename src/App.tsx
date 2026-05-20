@@ -75,23 +75,8 @@ export default function App() {
 
   const [resultFilterExamId, setResultFilterExamId] = useState<string>('all');
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
-  const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const isAdminView = view === 'admin-dash' || view === 'admin-create';
   const isAdminDataView = isAdmin && isAdminView;
-
-  useEffect(() => {
-    let script = document.getElementById('tailwind-cdn') as HTMLScriptElement;
-    if (!script) {
-      script = document.createElement('script');
-      script.id = 'tailwind-cdn';
-      script.src = "https://cdn.tailwindcss.com";
-      document.head.appendChild(script);
-    }
-    const handleLoad = () => setIsStyleLoaded(true);
-    if ((window as any).tailwind) setIsStyleLoaded(true);
-    else script.addEventListener('load', handleLoad);
-    return () => script.removeEventListener('load', handleLoad);
-  }, []);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
@@ -656,8 +641,6 @@ export default function App() {
     link.setAttribute("download", `뷔르트_결과통계_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
-
-  if (!isStyleLoaded) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><p className="text-slate-400 font-bold">디자인 로딩중...</p></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col items-center">
