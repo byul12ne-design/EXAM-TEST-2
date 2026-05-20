@@ -49,7 +49,6 @@ export default function QuizRoom({
 
     const storageKey = `quizExitPolicy_${currentExamId}`;
     const shouldForfeit = currentExam.exitPolicy === 'forfeit';
-    const warnOnExit = currentExam.warnOnExit;
 
     const markLeft = () => {
       if (shouldForfeit) {
@@ -58,7 +57,6 @@ export default function QuizRoom({
     };
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!warnOnExit) return;
       e.preventDefault();
       e.returnValue = '시험을 떠나면 응시가 취소될 수 있습니다.';
       return e.returnValue;
@@ -78,18 +76,14 @@ export default function QuizRoom({
     if (shouldForfeit) {
       localStorage.setItem(storageKey, 'active');
     }
-    if (warnOnExit) {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
     // Only mark left on pagehide/unload (these run when navigation actually happens),
     // not on visibilitychange which can fire when the browser shows the beforeunload prompt.
     window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('unload', handleUnload);
 
     return () => {
-      if (warnOnExit) {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('unload', handleUnload);
     };

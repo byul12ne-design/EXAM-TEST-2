@@ -67,6 +67,13 @@ export default function App() {
   const [timeUpModalOpen, setTimeUpModalOpen] = useState(false);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
 
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaveConfirmTitle, setLeaveConfirmTitle] = useState('');
+  const [leaveConfirmMessage, setLeaveConfirmMessage] = useState('');
+  const [pendingLeaveAction, setPendingLeaveAction] = useState<(() => Promise<void>) | null>(null);
+  const restoreHistoryOnCancel = React.useRef(false);
+  const leaveConfirmOpenRef = React.useRef(false);
+
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
   const [bankCategoryFilter, setBankCategoryFilter] = useState<string>('all');
@@ -165,6 +172,34 @@ export default function App() {
   }, [isAdminDataView, userProfile?.employeeId, userProfile?.role]);
 
   const showToast = (message: string) => { setToastMessage(message); setTimeout(() => setToastMessage(null), 3000); };
+
+  const promptLeave = useCallback((action: () => Promise<void>, title: string, message: string) => {
+    setPendingLeaveAction(() => action);
+    setLeaveConfirmTitle(title);
+    setLeaveConfirmMessage(message);
+    setLeaveConfirmOpen(true);
+  }, []);
+
+  const handleLeaveConfirm = useCallback(async () => {
+    setLeaveConfirmOpen(false);
+    const action = pendingLeaveAction;
+    setPendingLeaveAction(null);
+    restoreHistoryOnCancel.current = false;
+    if (action) await action();
+  }, [pendingLeaveAction]);
+
+  const handleLeaveCancel = useCallback(() => {
+    setLeaveConfirmOpen(false);
+    setPendingLeaveAction(null);
+    if (restoreHistoryOnCancel.current) {
+      window.history.pushState({ quizGuard: true }, '');
+      restoreHistoryOnCancel.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    leaveConfirmOpenRef.current = leaveConfirmOpen;
+  }, [leaveConfirmOpen]);
 
   const parseCSV = (text: string) => {
     const rows = [];
@@ -479,39 +514,48 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [view, currentExamId, userProfile, exams, handleAutoSubmit]);
 
-  const handleMobileBack = async () => {
+  const performQuizExit = async (shouldForfeit: boolean) => {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam) { setView('home'); return; }
+    if (!userProfile) { setView('home'); return; }
 
-    if (exam.exitPolicy === 'forfeit') {
+    if (shouldForfeit) {
       window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
       await submitExam({});
       return;
     }
 
-    const shouldLeave = window.confirm('현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
-    if (!shouldLeave) return;
-
-    if (userProfile) {
-      try {
-        if (exam.mode === 'study') {
-          await setDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`), {
-            activeQuestions,
-            queue: questionQueue,
-            firstAttemptAnswers,
-          }, { merge: true });
-        } else if (exam.mode === 'test') {
-          await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), {
-            answers: testAnswers,
-          }, { merge: true });
-        }
-        showToast('진행 상황이 저장되었습니다.');
-      } catch (e) {
-        console.error('진행 상황 저장 실패', e);
-        showToast('진행 상황 저장에 실패했습니다.');
+    try {
+      if (exam.mode === 'study') {
+        await setDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`), {
+          activeQuestions,
+          queue: questionQueue,
+          firstAttemptAnswers,
+        }, { merge: true });
+      } else if (exam.mode === 'test') {
+        await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), {
+          answers: testAnswers,
+        }, { merge: true });
       }
+      showToast('진행 상황이 저장되었습니다.');
+    } catch (e) {
+      console.error('진행 상황 저장 실패', e);
+      showToast('진행 상황 저장에 실패했습니다.');
     }
+
     setView('home');
+  };
+
+  const handleMobileBack = async () => {
+    const exam = exams.find(e => e.id === currentExamId);
+    if (!exam) { setView('home'); return; }
+
+    if (exam.exitPolicy === 'forfeit') {
+      promptLeave(() => performQuizExit(true), '정말 종료하시겠습니까?', '시험을 떠나면 응시 기회가 박탈됩니다. 나가시겠습니까?');
+      return;
+    }
+
+    promptLeave(() => performQuizExit(false), '정말 종료하시겠습니까?', '현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
   };
 
   async function submitExam(finalAnswers: Record<number, number>) {
@@ -554,19 +598,39 @@ export default function App() {
   const handleLogoClick = async () => {
     const exam = exams.find(e => e.id === currentExamId);
     if (view === 'student-take' && exam) {
-      const isForfeit = exam.exitPolicy === 'forfeit';
-      const msg = isForfeit ? '지금 화면을 벗어나면 응시 기회가 박탈됩니다. 정말 나가시겠습니까?' : '시험을 떠나시겠습니까?';
-      const ok = window.confirm(msg);
-      if (!ok) return;
-      if (isForfeit) {
-        // Ensure immediate submission/penalty when user explicitly confirms leaving
-        await submitExam({});
+      if (exam.exitPolicy === 'forfeit') {
+        promptLeave(() => performQuizExit(true), '정말 종료하시겠습니까?', '시험을 떠나면 응시 기회가 박탈됩니다. 나가시겠습니까?');
+      } else {
+        promptLeave(() => performQuizExit(false), '정말 종료하시겠습니까?', '현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
       }
-      setView('home');
       return;
     }
     setView('home');
   };
+
+  useEffect(() => {
+    if (view !== 'student-take') return;
+
+    const exam = exams.find(e => e.id === currentExamId);
+    if (!exam) return;
+
+    window.history.pushState({ quizGuard: true }, '');
+
+    const onPopState = () => {
+      if (view !== 'student-take' || leaveConfirmOpenRef.current) return;
+      restoreHistoryOnCancel.current = true;
+      if (exam.exitPolicy === 'forfeit') {
+        promptLeave(() => performQuizExit(true), '정말 종료하시겠습니까?', '뒤로가기를 누르시면 시험이 종료되고 응시 기회가 차감됩니다.');
+      } else {
+        promptLeave(() => performQuizExit(false), '정말 종료하시겠습니까?', '뒤로가기를 누르시면 현재 진행 상황이 저장되고 메인 화면으로 이동합니다.');
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [view, currentExamId, exams, promptLeave, performQuizExit]);
 
   const handleSaveExam = async () => {
     if (!newExamTitle.trim()) return showToast('제목을 입력해주세요.');
@@ -1041,6 +1105,19 @@ export default function App() {
       {toastMessage && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-10 py-5 rounded-full text-sm font-black shadow-2xl z-[110] animate-in flex items-center gap-3">
           <span className="text-emerald-400 font-bold">●</span> {toastMessage}
+        </div>
+      )}
+
+      {leaveConfirmOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-xl rounded-[2rem] bg-white p-6 shadow-2xl border border-slate-200">
+            <h2 className="text-2xl font-black text-slate-900 mb-3">{leaveConfirmTitle}</h2>
+            <p className="text-slate-600 mb-6 whitespace-pre-line">{leaveConfirmMessage}</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button onClick={handleLeaveConfirm} className="flex-1 bg-red-600 text-white py-4 rounded-3xl font-black hover:bg-red-700 transition">나가기</button>
+              <button onClick={handleLeaveCancel} className="flex-1 bg-slate-100 text-slate-700 py-4 rounded-3xl font-black hover:bg-slate-200 transition">돌아가기</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
