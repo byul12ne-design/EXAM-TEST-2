@@ -45,6 +45,7 @@ export default function App() {
   const [studentScore, setStudentScore] = useState(0);
   const [lastResult, setLastResult] = useState<ExamResult | null>(null); 
   const [selectedResultDetail, setSelectedResultDetail] = useState<ExamResult | null>(null); 
+  const [isAborted, setIsAborted] = useState(false);
 
   const [questionQueue, setQuestionQueue] = useState<{q: Question, originalIndex: number}[]>([]); 
   const [isAnswerChecked, setIsAnswerChecked] = useState(false); 
@@ -352,14 +353,43 @@ export default function App() {
       return;
     }
 
+    setIsAborted(false);
     const exitStorageKey = getExitPolicyStorageKey(currentExamId);
     if (exam.exitPolicy === 'forfeit' && localStorage.getItem(exitStorageKey) === 'left') {
-      window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
+      window.alert('시험 도중 이탈하여 자동으로 현재까지 제출한 문제만 채점한 뒤 종료 처리됩니다.');
       clearExitPolicyStorage(currentExamId);
-      await submitExam({});
+
+      let savedAnswers: Record<number, number> = {};
+      let savedActiveQuestions: Question[] = [];
+      if (exam.mode === 'study') {
+        const spDoc = await getDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`));
+        if (spDoc.exists()) {
+          const data = spDoc.data();
+          savedAnswers = data.firstAttemptAnswers || {};
+          savedActiveQuestions = data.activeQuestions || [];
+        }
+      } else {
+        const tpDoc = await getDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
+        if (tpDoc.exists()) {
+          const data = tpDoc.data();
+          savedAnswers = data.answers || {};
+          savedActiveQuestions = data.activeQuestions || [];
+        }
+      }
+
+      const pool = exam.questions || [];
+      const displayCnt = exam.displayCount || pool.length;
+      const activeForSubmit = savedActiveQuestions.length > 0
+        ? savedActiveQuestions
+        : exam.isShuffleEnabled
+          ? [...pool].sort(() => Math.random() - 0.5).slice(0, displayCnt)
+          : pool.slice(0, displayCnt);
+
+      await submitExam(savedAnswers, { abort: true, activeQuestionsOverride: activeForSubmit });
       return;
     }
 
+    let selected: Question[] | null = null;
     if (exam.mode === 'study') {
       const spDoc = await getDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`));
       if (spDoc.exists() && spDoc.data().queue && spDoc.data().queue.length > 0) {
@@ -373,16 +403,25 @@ export default function App() {
       }
     } else if (exam.mode === 'test') {
       const tpDoc = await getDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
-      if (tpDoc.exists() && tpDoc.data().answers) {
-        setTestAnswers(tpDoc.data().answers);
-        showToast('🔄 임시 저장된 답안을 불러왔습니다.');
-      } else setTestAnswers({});
+      if (tpDoc.exists()) {
+        const data = tpDoc.data();
+        setTestAnswers(data.answers || {});
+        if (data.answers) showToast('🔄 임시 저장된 답안을 불러왔습니다.');
+        if (data.activeQuestions && Array.isArray(data.activeQuestions) && data.activeQuestions.length > 0) {
+          selected = data.activeQuestions as Question[];
+          setActiveQuestions(selected);
+        }
+      } else {
+        setTestAnswers({});
+      }
     }
 
     const pool = exam.questions || [];
     const displayCnt = exam.displayCount || pool.length;
-    const selected = exam.isShuffleEnabled ? [...pool].sort(() => Math.random() - 0.5).slice(0, displayCnt) : pool.slice(0, displayCnt);
-    
+    if (!selected) {
+      selected = exam.isShuffleEnabled ? [...pool].sort(() => Math.random() - 0.5).slice(0, displayCnt) : pool.slice(0, displayCnt);
+    }
+
     setActiveQuestions(selected);
     setFirstAttemptAnswers({});
     
@@ -431,7 +470,7 @@ export default function App() {
   const handleTestOptionClick = async (qIndex: number, oi: number) => {
     const nextAnswers = {...testAnswers, [qIndex]: oi};
     setTestAnswers(nextAnswers);
-    if (userProfile) await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), { answers: nextAnswers }, { merge: true });
+    if (userProfile) await setDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`), { answers: nextAnswers, activeQuestions }, { merge: true });
   };
 
   const handleStudyOptionClick = (index: number) => {
@@ -468,7 +507,7 @@ export default function App() {
   }, [isAutoSubmitting, userProfile, exams, currentExamId, testAnswers, firstAttemptAnswers, submitExam]);
 
   useEffect(() => {
-    if (view !== 'student-take' || !currentExamId || !userProfile) return;
+    if (view !== 'student-take' || !currentExamId || !userProfile || isAborted) return;
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !exam.timeLimitMinutes || exam.timeLimitMinutes <= 0) {
       setRemainingSeconds(0);
@@ -521,8 +560,10 @@ export default function App() {
     if (!userProfile) { setView('home'); return; }
 
     if (shouldForfeit) {
-      window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
-      await submitExam({});
+      setIsAborted(true);
+      window.alert('시험 도중 이탈하여 현재까지 제출된 문제만 채점한 뒤 종료 처리됩니다.');
+      const currentAnswers = exam.mode === 'test' ? testAnswers : firstAttemptAnswers;
+      await submitExam(currentAnswers, { abort: true });
       return;
     }
 
@@ -559,13 +600,15 @@ export default function App() {
     promptLeave(() => performQuizExit(false), '정말 종료하시겠습니까?', '현재 진행 상황을 저장하고 메인 화면으로 돌아가시겠습니까?');
   };
 
-  async function submitExam(finalAnswers: Record<number, number>) {
+  async function submitExam(finalAnswers: Record<number, number>, options: { abort?: boolean; activeQuestionsOverride?: Question[] } = {}) {
     const exam = exams.find(e => e.id === currentExamId);
     if (!exam || !userProfile) return;
 
-    const questionsForResult = activeQuestions.length > 0
-      ? activeQuestions
-      : exam.questions.slice(0, exam.displayCount || exam.questions.length);
+    const questionsForResult = (options.activeQuestionsOverride && options.activeQuestionsOverride.length > 0)
+      ? options.activeQuestionsOverride
+      : activeQuestions.length > 0
+        ? activeQuestions
+        : exam.questions.slice(0, exam.displayCount || exam.questions.length);
 
     const correctCount = questionsForResult.reduce((cnt, q, idx) => finalAnswers[idx] === q.answerIndex ? cnt + 1 : cnt, 0);
     const score = questionsForResult.length > 0 ? Math.round((correctCount / questionsForResult.length) * 100) : 0;
@@ -587,12 +630,22 @@ export default function App() {
 
     try {
       const docRef = await addDoc(collection(db, 'results'), resultData);
-      setLastResult({ id: docRef.id, ...resultData });
+      if (!options.abort) {
+        setLastResult({ id: docRef.id, ...resultData });
+      }
       if (exam.mode === 'test') await deleteDoc(doc(db, 'testProgress', `${userProfile.uid}_${currentExamId}`));
       if (exam.mode === 'study') await deleteDoc(doc(db, 'studyProgress', `${userProfile.uid}_${currentExamId}`));
       clearTimerStorage(currentExamId);
       clearExitPolicyStorage(currentExamId);
     } catch(e) { console.error("결과 저장 오류", e); }
+
+    if (options.abort) {
+      showToast('중도 이탈 처리되었습니다. 현재까지 제출한 문제만 채점되었습니다.');
+      setIsAborted(false);
+      setView('home');
+      return;
+    }
+
     setView('student-result');
   }
 
@@ -1014,6 +1067,7 @@ export default function App() {
             handleStudyOptionClick={handleStudyOptionClick}
             handleTestOptionClick={handleTestOptionClick}
             submitExam={submitExam}
+            isAborted={isAborted}
           />
         )}
 

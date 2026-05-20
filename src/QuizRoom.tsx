@@ -19,7 +19,8 @@ interface QuizRoomProps {
   handleStudyNextQuestion: () => Promise<void>;
   handleStudyOptionClick: (oi: number) => void | Promise<void>;
   handleTestOptionClick: (qIndex: number, oi: number) => Promise<void>;
-  submitExam: (answers: Record<number, number>) => Promise<void>;
+  submitExam: (answers: Record<number, number>, options?: { abort?: boolean; activeQuestionsOverride?: Question[] }) => Promise<void>;
+  isAborted: boolean;
 }
 
 export default function QuizRoom({
@@ -41,11 +42,12 @@ export default function QuizRoom({
   handleStudyOptionClick,
   handleTestOptionClick,
   submitExam,
+  isAborted,
 }: QuizRoomProps) {
   const [hasForfeited, setHasForfeited] = useState(false);
 
   useEffect(() => {
-    if (view !== 'student-take' || !currentExamId || !currentExam) return;
+    if (view !== 'student-take' || !currentExamId || !currentExam || isAborted) return;
 
     const storageKey = `quizExitPolicy_${currentExamId}`;
     const shouldForfeit = currentExam.exitPolicy === 'forfeit';
@@ -77,8 +79,6 @@ export default function QuizRoom({
       localStorage.setItem(storageKey, 'active');
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
-    // Only mark left on pagehide/unload (these run when navigation actually happens),
-    // not on visibilitychange which can fire when the browser shows the beforeunload prompt.
     window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('unload', handleUnload);
 
@@ -87,20 +87,15 @@ export default function QuizRoom({
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('unload', handleUnload);
     };
-  }, [view, currentExamId, currentExam]);
+  }, [view, currentExamId, currentExam, isAborted]);
 
-  useEffect(() => {
-    if (view !== 'student-take' || !currentExamId || !currentExam || hasForfeited) return;
-    if (currentExam.exitPolicy !== 'forfeit') return;
-
-    const storageKey = `quizExitPolicy_${currentExamId}`;
-    const status = localStorage.getItem(storageKey);
-    if (status !== 'left') return;
-
-    setHasForfeited(true);
-    window.alert('시험 도중 이탈하여 자동으로 0점 처리 및 응시 횟수가 차감되었습니다.');
-    submitExam({});
-  }, [view, currentExamId, currentExam, hasForfeited, submitExam]);
+  if (isAborted) {
+    return (
+      <div className="max-w-2xl mx-auto w-full animate-in pb-20 text-center py-20">
+        <p className="text-xl font-black text-slate-800">퀴즈가 중간에 종료되어 메인 화면으로 이동합니다.</p>
+      </div>
+    );
+  }
 
   if (view === 'student-entry') {
     return (
