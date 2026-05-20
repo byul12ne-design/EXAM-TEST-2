@@ -320,7 +320,16 @@ export default function App() {
 
   const startExam = async () => {
     const exam = exams.find(e => e.id === currentExamId);
-    if (!exam || !userProfile) return;
+    if (!exam) {
+      showToast('퀴즈 정보를 불러올 수 없습니다. 메인으로 이동합니다.');
+      setView('home');
+      return;
+    }
+    if (!userProfile) {
+      showToast('먼저 교육장에 입장하여 로그인을 완료해주세요.');
+      setView('home');
+      return;
+    }
 
     const exitStorageKey = getExitPolicyStorageKey(currentExamId);
     if (exam.exitPolicy === 'forfeit' && localStorage.getItem(exitStorageKey) === 'left') {
@@ -432,6 +441,7 @@ export default function App() {
     if (!exam) return;
 
     const finalAnswers = exam.mode === 'test' ? testAnswers : firstAttemptAnswers;
+    window.alert('제한 시간이 완료되어 시험이 자동 제출됩니다.');
     setTimeUpModalOpen(true);
     await submitExam(finalAnswers);
   }, [isAutoSubmitting, userProfile, exams, currentExamId, testAnswers, firstAttemptAnswers, submitExam]);
@@ -942,7 +952,6 @@ export default function App() {
             isAttemptLimitExceeded={isAttemptLimitExceeded}
             startExam={startExam}
             remainingSeconds={remainingSeconds}
-            timeUpModalOpen={timeUpModalOpen}
             handleMobileBack={handleMobileBack}
             activeQuestions={activeQuestions}
             questionQueue={questionQueue}

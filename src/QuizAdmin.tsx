@@ -130,7 +130,7 @@ export default function QuizAdmin({
           <h5 className="font-bold text-slate-700">⏱️ 제한 시간</h5>
           <p className="text-[10px] text-slate-500 mt-1">퀴즈 응시 중 타이머를 활성화합니다.</p>
           <select value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(e.target.value)} className="mt-3 w-full p-3 rounded-xl border-2 bg-slate-50 outline-none focus:border-blue-500 text-slate-800 font-bold">
-            <option value="0">No Limit</option>
+            <option value="0">시간제한 없음</option>
             <option value="10">10분</option>
             <option value="20">20분</option>
             <option value="30">30분</option>

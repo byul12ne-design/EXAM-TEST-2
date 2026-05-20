@@ -10,7 +10,6 @@ interface QuizRoomProps {
   isAttemptLimitExceeded: boolean;
   startExam: () => Promise<void>;
   remainingSeconds: number;
-  timeUpModalOpen: boolean;
   handleMobileBack: () => Promise<void>;
   activeQuestions: Question[];
   questionQueue: { q: Question; originalIndex: number }[];
@@ -32,7 +31,6 @@ export default function QuizRoom({
   isAttemptLimitExceeded,
   startExam,
   remainingSeconds,
-  timeUpModalOpen,
   handleMobileBack,
   activeQuestions,
   questionQueue,
@@ -131,7 +129,7 @@ export default function QuizRoom({
           </div>
         )}
 
-        <button onClick={startExam} disabled={isAttemptLimitExceeded} className={`bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all ${isAttemptLimitExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}>
+        <button type="button" onClick={startExam} disabled={isAttemptLimitExceeded} className={`bg-blue-600 text-white px-16 py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all ${isAttemptLimitExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}>
           과정 시작하기 👉
         </button>
       </div>
@@ -143,7 +141,7 @@ export default function QuizRoom({
       <div className="max-w-2xl mx-auto w-full animate-in pb-20">
         {currentExam?.timeLimitMinutes && currentExam.timeLimitMinutes > 0 && (
           <div className="sticky top-28 z-40 mb-6">
-            <div className="bg-red-600 text-white rounded-3xl px-6 py-4 text-center font-black text-xl shadow-xl border border-red-700">
+            <div className={`rounded-3xl px-6 py-4 text-center font-black text-xl shadow-xl border ${remainingSeconds < 60 ? 'bg-red-700 text-white border-red-800 animate-pulse' : 'bg-red-600 text-white border-red-700'}`}>
               제한시간: {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
             </div>
           </div>
